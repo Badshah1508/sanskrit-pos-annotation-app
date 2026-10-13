@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import { exportApi } from '../api';
 
 export default function ExportPanel({ onBack }) {
   const [downloading, setDownloading] = useState(false);
@@ -9,16 +9,10 @@ export default function ExportPanel({ onBack }) {
     setDownloading(true);
     setStatus(null);
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:8000/api/export/verified.csv', {
-        headers: {
-          Authorization: `Bearer ${token}`
-        },
-        responseType: 'blob'
-      });
+      const data = await exportApi.downloadVerifiedCsv();
 
       // Create download link
-      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([data], { type: 'text/csv;charset=utf-8;' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -27,22 +21,13 @@ export default function ExportPanel({ onBack }) {
       link.click();
       link.parentNode.removeChild(link);
 
-      setStatus({ type: 'success', text: 'Verified CSV downloaded successfully!' });
+      setStatus({ type: 'success', text: 'Verified CSV downloaded successfully from database!' });
     } catch (err) {
-      // In frontend mock mode, generate a client-side CSV sample
-      const mockCsvContent = "\uFEFFdoc_id,sentence_id,annotation_id,sentence_text,token_id,token,lemma,upos,stanza_upos,xpos,feats,gold_sanskrit_tag,annotation_status,annotation_note,verified_by,verified_at\n" +
-        "news_art_001,1,news_art_001_1,प्रधानमन्त्री नरेन्द्रमोदी अद्य नवदेहल्यां नूतनं सङ्ग्रहालयम् उद्घाटितवान् ।,1,प्रधानमन्त्री,प्रधानमन्त्रिन्,NOUN,NOUN,_,Case=Nom|Number=Sing,N,verified,,expert_01,2026-10-11T12:00:00\n";
-      
-      const blob = new Blob([mockCsvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'final_pos_verified_mock.csv');
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode.removeChild(link);
-
-      setStatus({ type: 'info', text: 'Backend not connected yet. Downloaded mock demonstration CSV (UTF-8).' });
+      console.error('Export download error:', err);
+      setStatus({
+        type: 'error',
+        text: 'Failed to download verified CSV: ' + (err.response?.data?.detail || err.message || 'Server error')
+      });
     } finally {
       setDownloading(false);
     }

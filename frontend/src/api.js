@@ -194,4 +194,19 @@ export const annotationApi = {
   }
 };
 
+export const exportApi = {
+  downloadVerifiedCsv: async () => {
+    if (useMock) {
+      const mockCsvContent = "\uFEFFdoc_id,sentence_id,annotation_id,sentence_text,token_id,token,lemma,upos,stanza_upos,xpos,feats,gold_sanskrit_tag,annotation_status,annotation_note,verified_by,verified_at\n" +
+        "news_art_001,1,news_art_001_1,प्रधानमन्त्री नरेन्द्रमोदी अद्य नवदेहल्यां नूतनं सङ्ग्रहालयम् उद्घाटितवान् ।,1,प्रधानमन्त्री,प्रधानमन्त्रिन्,NOUN,NOUN,_,Case=Nom|Number=Sing,N,verified,,expert_01,2026-10-11T12:00:00\n";
+      return new Blob([mockCsvContent], { type: 'text/csv;charset=utf-8;' });
+    }
+    const response = await apiClient.get('/export/verified.csv', {
+      responseType: 'blob'
+    });
+    return response.data;
+  }
+};
+
 export default apiClient;
+
