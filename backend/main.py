@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base, SessionLocal
 from config import settings
-from models import TagInventory, User
+from models import TagInventory, User, Sentence
 from auth import get_password_hash
 
 # Import routers
@@ -51,24 +51,25 @@ def startup_event():
                 db.add(tag_record)
             db.commit()
 
-        # 2. Seed default admin and expert if users table is empty
-        user_count = db.query(User).count()
-        if user_count == 0:
-            print("Creating default users (admin & scholar)...")
+        # 2. Check and ensure 7 expert assignments are set up if sentences exist
+        sentence_count = db.query(Sentence).count()
+        if sentence_count == 7000:
+            assigned_count = db.query(Sentence).filter(Sentence.assigned_expert_id.isnot(None)).count()
+            user7_exists = db.query(User).filter(User.username == "user7").first()
+            if assigned_count < 7000 or not user7_exists:
+                print("Setting up 7 expert workspace assignments...")
+                from scripts.setup_expert_assignments import setup_assignments
+                setup_assignments(db)
+        elif db.query(User).count() == 0:
+            # Seed fallback default admin
             admin_user = User(
                 username="admin",
                 email="admin@example.ac.in",
                 password_hash=get_password_hash("admin123"),
-                role="admin"
-            )
-            expert_user = User(
-                username="sanskrit_scholar",
-                email="scholar@example.ac.in",
-                password_hash=get_password_hash("password123"),
-                role="expert"
+                role="admin",
+                display_name="Administrator"
             )
             db.add(admin_user)
-            db.add(expert_user)
             db.commit()
     finally:
         db.close()

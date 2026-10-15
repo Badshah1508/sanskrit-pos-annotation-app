@@ -7,6 +7,9 @@ class UserBase(BaseModel):
     username: str
     email: EmailStr
     role: str = "expert"
+    display_name: Optional[str] = None
+    assigned_range_start: Optional[int] = None
+    assigned_range_end: Optional[int] = None
 
 class UserCreate(UserBase):
     password: str
@@ -58,6 +61,8 @@ class SentenceBase(BaseModel):
     annotation_id: str
     sentence_text: str
     status: str
+    sentence_position: Optional[int] = None
+    assigned_expert_id: Optional[int] = None
     annotation_note: Optional[str] = None
     verified_by: Optional[str] = None
     verified_at: Optional[datetime] = None
@@ -78,7 +83,17 @@ class SentenceVerifyRequest(BaseModel):
     note: Optional[str] = None
 
 
-# ----------------- Dataset Stats Schema -----------------
+# ----------------- Workspace & Dataset Stats Schema -----------------
+class WorkspaceInfo(BaseModel):
+    id: int
+    key: str
+    label: str
+    username: str
+    range_label: str
+    range_start: int
+    range_end: int
+    total_sentences: int
+
 class DatasetStatsResponse(BaseModel):
     total_sentences: int
     pending_sentences: int
@@ -87,6 +102,9 @@ class DatasetStatsResponse(BaseModel):
     total_tokens: int
     completion_percentage: float
     expert_verified: int
+    workspace_label: Optional[str] = None
+    assigned_range: Optional[str] = None
+
 
 
 # ----------------- Tag Schema -----------------

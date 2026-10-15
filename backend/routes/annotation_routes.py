@@ -1,5 +1,5 @@
-from typing import List
-from fastapi import APIRouter, Depends
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Sentence, User
@@ -48,30 +48,37 @@ def verify_sentence(
 def get_pending_sentences(
     limit: int = 20,
     offset: int = 0,
+    workspace: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Returns a paginated list of pending sentences."""
-    return (
-        db.query(Sentence)
-        .filter(Sentence.status == "pending")
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    """Returns a paginated list of pending sentences within the expert's workspace."""
+    query = db.query(Sentence).filter(Sentence.status == "pending")
+    if current_user.role != "admin":
+        query = query.filter(Sentence.assigned_expert_id == current_user.id)
+    elif workspace:
+        from routes.dataset_routes import resolve_workspace_user
+        target = resolve_workspace_user(workspace, current_user, db)
+        if target:
+            query = query.filter(Sentence.assigned_expert_id == target.id)
+    return query.order_by(Sentence.id.asc()).offset(offset).limit(limit).all()
 
 @router.get("/verified", response_model=List[SentenceDetailResponse])
 def get_verified_sentences(
     limit: int = 20,
     offset: int = 0,
+    workspace: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Returns a paginated list of expert-verified sentences."""
-    return (
-        db.query(Sentence)
-        .filter(Sentence.status == "verified")
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    """Returns a paginated list of expert-verified sentences within the expert's workspace."""
+    query = db.query(Sentence).filter(Sentence.status == "verified")
+    if current_user.role != "admin":
+        query = query.filter(Sentence.assigned_expert_id == current_user.id)
+    elif workspace:
+        from routes.dataset_routes import resolve_workspace_user
+        target = resolve_workspace_user(workspace, current_user, db)
+        if target:
+            query = query.filter(Sentence.assigned_expert_id == target.id)
+    return query.order_by(Sentence.id.asc()).offset(offset).limit(limit).all()
+

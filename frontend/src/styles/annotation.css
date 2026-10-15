@@ -44,6 +44,43 @@
   color: var(--text-muted);
 }
 
+/* User Workspace Dropdown in Header */
+.workspace-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #f8fafc;
+  padding: 0.25rem 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid #cbd5e1;
+}
+
+.workspace-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.workspace-select {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #0f172a;
+  background: white;
+  border: 1px solid #94a3b8;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.workspace-select:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(30, 58, 138, 0.2);
+}
+
 .main-content {
   flex: 1;
   max-width: 1200px;
@@ -265,6 +302,25 @@
 
 /* Responsive Breakpoints */
 @media (max-width: 768px) {
+  .navbar {
+    padding: 0.6rem 0.85rem;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+  .nav-links {
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .workspace-selector-container {
+    width: 100%;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+  }
+  .workspace-select {
+    flex: 1;
+  }
   .token-table-wrapper {
     display: none;
   }

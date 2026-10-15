@@ -5,7 +5,7 @@ import TokenCard from './TokenCard';
 import ConfirmDialog from './ConfirmDialog';
 import { validateSentenceForVerification } from '../utils/validation';
 
-export default function AnnotationPage({ user, onBackToDashboard }) {
+export default function AnnotationPage({ user, workspace, onSelectWorkspace, onBackToDashboard }) {
   const [sentence, setSentence] = useState(null);
   const [tokens, setTokens] = useState([]);
   const [note, setNote] = useState('');
@@ -14,18 +14,38 @@ export default function AnnotationPage({ user, onBackToDashboard }) {
   const [feedback, setFeedback] = useState(null); // { type: 'success' | 'error', text: '' }
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(null);
+  const [completedAll, setCompletedAll] = useState(false);
+  const [completionMessage, setCompletionMessage] = useState('');
+
+  // Determine user's own workspace key
+  const getUserWorkspaceKey = () => {
+    const uname = (user?.username || '').toLowerCase().replace(/[\s_]/g, '');
+    for (let i = 1; i <= 7; i++) {
+      if (uname === `user${i}`) return `user${i}`;
+    }
+    if (uname === 'sanskritscholar') return 'user1';
+    return 'user1';
+  };
+  const myWorkspaceKey = getUserWorkspaceKey();
+  const myWorkspaceLabel = `User ${myWorkspaceKey.replace('user', '')}`;
 
   useEffect(() => {
-    loadNextSentence();
-  }, []);
+    loadNextSentence(workspace);
+  }, [workspace]);
 
-  const loadNextSentence = async () => {
+  const loadNextSentence = async (targetWs = workspace) => {
     setLoading(true);
     setFeedback(null);
+    setAccessDenied(null);
+    setCompletedAll(false);
     try {
-      const data = await datasetApi.getNextSentence();
+      const queryWs = (targetWs === 'all') ? null : targetWs;
+      const data = await datasetApi.getNextSentence(queryWs);
       if (!data) {
         setSentence(null);
+        setCompletedAll(true);
+        setCompletionMessage('All pending sentences in this workspace have been verified.');
         return;
       }
       setSentence(data);
@@ -33,7 +53,19 @@ export default function AnnotationPage({ user, onBackToDashboard }) {
       setNote(data.annotation_note || '');
       setHasUnsavedChanges(false);
     } catch (err) {
-      setFeedback({ type: 'error', text: 'Error fetching next sentence: ' + (err.message || 'Unknown error') });
+      if (err.response?.status === 403) {
+        setAccessDenied(err.response?.data?.detail || 'Access denied: You do not have permission to view or annotate this workspace.');
+        setSentence(null);
+      } else if (err.response?.status === 404) {
+        setSentence(null);
+        setCompletedAll(true);
+        setCompletionMessage(err.response?.data?.detail || 'All 1,000 sentences assigned to this workspace have been verified!');
+      } else {
+        setFeedback({
+          type: 'error',
+          text: 'Error fetching next sentence: ' + (err.response?.data?.detail || err.message || 'Unknown error')
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -94,12 +126,10 @@ export default function AnnotationPage({ user, onBackToDashboard }) {
         note
       });
       setHasUnsavedChanges(false);
-      setFeedback({ type: 'success', text: `Sentence ${sentence.annotation_id} verified and saved! Loading next pending sentence...` });
+      setFeedback({ type: 'success', text: `Sentence ${sentence.annotation_id} verified and saved!` });
 
-      // Automatically load next pending sentence after short display
-      setTimeout(() => {
-        loadNextSentence();
-      }, 700);
+      // Immediate transition to next sentence for fast and smooth navigation
+      await loadNextSentence(workspace);
     } catch (err) {
       setFeedback({ type: 'error', text: 'Failed to verify sentence: ' + (err.response?.data?.detail || err.message) });
     } finally {
@@ -126,14 +156,57 @@ export default function AnnotationPage({ user, onBackToDashboard }) {
     );
   }
 
-  if (!sentence) {
+  // Access Denied (expert selected another expert's workspace)
+  if (accessDenied) {
     return (
-      <div style={{ textAlign: 'center', padding: '4rem', background: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-        <h3 style={{ fontSize: '1.5rem', color: '#15803d', marginBottom: '0.75rem' }}>🎉 Congratulations!</h3>
-        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-          All pending sentences in the permitted queue have been verified.
+      <div style={{
+        background: '#fef2f2',
+        border: '1.5px solid #f87171',
+        borderRadius: 'var(--radius-md)',
+        padding: '2.5rem 2rem',
+        margin: '2rem auto',
+        maxWidth: '700px',
+        textAlign: 'center'
+      }}>
+        <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🔒</div>
+        <h3 style={{ color: '#991b1b', fontSize: '1.4rem', fontWeight: 700, marginBottom: '0.75rem' }}>
+          Workspace Access Restricted
+        </h3>
+        <p style={{ color: '#7f1d1d', fontSize: '0.95rem', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+          {accessDenied}
         </p>
-        <button className="btn btn-primary" onClick={onBackToDashboard}>
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn btn-primary"
+            onClick={() => onSelectWorkspace(myWorkspaceKey)}
+            style={{ padding: '0.65rem 1.4rem' }}
+          >
+            ← Switch to My Workspace ({myWorkspaceLabel})
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={onBackToDashboard}
+            style={{ padding: '0.65rem 1.4rem' }}
+          >
+            Return to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // All sentences verified in this workspace
+  if (completedAll || !sentence) {
+    return (
+      <div style={{ textAlign: 'center', padding: '4rem 2rem', background: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', maxWidth: '700px', margin: '2rem auto' }}>
+        <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🎉</div>
+        <h3 style={{ fontSize: '1.5rem', color: '#15803d', marginBottom: '0.75rem', fontWeight: 700 }}>
+          Congratulations!
+        </h3>
+        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '1.05rem', lineHeight: 1.6 }}>
+          {completionMessage || 'All 1,000 sentences assigned to this workspace have been verified.'}
+        </p>
+        <button className="btn btn-primary" onClick={onBackToDashboard} style={{ padding: '0.65rem 1.5rem' }}>
           Return to Dashboard
         </button>
       </div>
@@ -173,6 +246,7 @@ export default function AnnotationPage({ user, onBackToDashboard }) {
           <div className="meta-info">
             <span className="meta-item">Document: <strong>{sentence.doc_id}</strong></span>
             <span className="meta-item">Sentence #{sentence.sentence_id}</span>
+            <span className="meta-item">Global Position: <strong>#{sentence.sentence_position || sentence.id}</strong> / 7,000</span>
             <span className="meta-item">Annotation ID: <strong>{sentence.annotation_id}</strong></span>
           </div>
 
@@ -249,7 +323,7 @@ export default function AnnotationPage({ user, onBackToDashboard }) {
         {/* Action Bar */}
         <div className="action-bar">
           <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
-            Expert: <strong>{user?.username || 'Current Scholar'}</strong>
+            Expert: <strong>{user?.display_name || user?.username || 'Current Scholar'}</strong>
           </div>
 
           <div className="action-buttons-group">

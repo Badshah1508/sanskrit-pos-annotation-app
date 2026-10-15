@@ -126,28 +126,53 @@ export const authApi = {
 };
 
 export const datasetApi = {
-  getStats: async () => {
+  getWorkspaces: async () => {
     if (useMock) {
-      await new Promise((r) => setTimeout(r, 200));
-      return MOCK_DATA.stats;
+      return [
+        { id: 1, key: 'user1', label: 'User 1', username: 'user1', range_label: '1–1,000', range_start: 1, range_end: 1000, total_sentences: 1000 },
+        { id: 2, key: 'user2', label: 'User 2', username: 'user2', range_label: '1,001–2,000', range_start: 1001, range_end: 2000, total_sentences: 1000 },
+        { id: 3, key: 'user3', label: 'User 3', username: 'user3', range_label: '2,001–3,000', range_start: 2001, range_end: 3000, total_sentences: 1000 },
+        { id: 4, key: 'user4', label: 'User 4', username: 'user4', range_label: '3,001–4,000', range_start: 3001, range_end: 4000, total_sentences: 1000 },
+        { id: 5, key: 'user5', label: 'User 5', username: 'user5', range_label: '4,001–5,000', range_start: 4001, range_end: 5000, total_sentences: 1000 },
+        { id: 6, key: 'user6', label: 'User 6', username: 'user6', range_label: '5,001–6,000', range_start: 5001, range_end: 6000, total_sentences: 1000 },
+        { id: 7, key: 'user7', label: 'User 7', username: 'user7', range_label: '6,001–7,000', range_start: 6001, range_end: 7000, total_sentences: 1000 }
+      ];
     }
-    const response = await apiClient.get('/dataset/stats');
+    const response = await apiClient.get('/dataset/workspaces');
     return response.data;
   },
 
-  getNextSentence: async () => {
+  getStats: async (workspace) => {
     if (useMock) {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 100));
+      return {
+        ...MOCK_DATA.stats,
+        total_sentences: workspace ? 1000 : MOCK_DATA.stats.total_sentences,
+        workspace_label: workspace ? `User ${workspace.replace('user', '')}` : 'All Workspaces',
+        assigned_range: workspace ? 'Assigned 1,000 sentences' : '1–7,000'
+      };
+    }
+    const response = await apiClient.get('/dataset/stats', {
+      params: workspace ? { workspace } : {}
+    });
+    return response.data;
+  },
+
+  getNextSentence: async (workspace) => {
+    if (useMock) {
+      await new Promise((r) => setTimeout(r, 100));
       const pending = MOCK_DATA.sentences.find(s => s.status !== 'verified') || MOCK_DATA.sentences[0];
       return JSON.parse(JSON.stringify(pending));
     }
-    const response = await apiClient.get('/dataset/sentences/next');
+    const response = await apiClient.get('/dataset/sentences/next', {
+      params: workspace ? { workspace } : {}
+    });
     return response.data;
   },
 
   getSentenceByAnnotationId: async (annotationId) => {
     if (useMock) {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 100));
       const s = MOCK_DATA.sentences.find(item => item.annotation_id === annotationId);
       if (!s) throw new Error('Sentence not found');
       return JSON.parse(JSON.stringify(s));

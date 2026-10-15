@@ -107,7 +107,21 @@ export default function LoginForm({ onLoginSuccess }) {
           {loading ? 'Authenticating...' : 'Sign In'}
         </button>
 
-        <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', fontSize: '0.85rem', color: '#64748b' }}>
+        <div style={{
+          marginTop: '1.25rem',
+          padding: '0.75rem 0.85rem',
+          backgroundColor: '#f8fafc',
+          border: '1px solid #e2e8f0',
+          borderRadius: 'var(--radius-sm)',
+          fontSize: '0.8rem',
+          color: '#475569',
+          lineHeight: 1.5
+        }}>
+          <div><strong>Expert Accounts:</strong> <code>user1</code> to <code>user7</code> (password: <code>password123</code>)</div>
+          <div style={{ marginTop: '0.2rem' }}><strong>Administrator:</strong> <code>admin</code> (password: <code>admin123</code>)</div>
+        </div>
+
+        <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', fontSize: '0.85rem', color: '#64748b' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
             <input
               type="checkbox"

@@ -23,6 +23,13 @@ def save_sentence_draft(
             detail=f"Sentence with annotation_id '{annotation_id}' not found."
         )
 
+    # Security check: User can only modify their own assigned sentences
+    if user.role != "admin" and sentence.assigned_expert_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: You cannot save a draft for a sentence assigned to another expert."
+        )
+
     # Map input by token_id
     tag_map = {t.token_id: t for t in token_inputs}
 
@@ -66,6 +73,13 @@ def verify_sentence_annotation(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Sentence with annotation_id '{annotation_id}' not found."
+        )
+
+    # Security check: User can only verify their own assigned sentences
+    if user.role != "admin" and sentence.assigned_expert_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: You cannot verify a sentence assigned to another expert."
         )
 
     tag_map = {t.token_id: t for t in token_inputs}

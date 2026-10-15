@@ -13,6 +13,9 @@ class User(Base):
     email = Column(String(100), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     role = Column(String(20), default="expert", nullable=False)  # 'admin' or 'expert'
+    display_name = Column(String(100), nullable=True)  # e.g. 'User 1'
+    assigned_range_start = Column(Integer, nullable=True)  # e.g. 1
+    assigned_range_end = Column(Integer, nullable=True)  # e.g. 1000
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -28,7 +31,8 @@ class Sentence(Base):
     status = Column(String(20), default="pending", index=True, nullable=False)  # pending, in_progress, verified
     annotation_note = Column(Text, nullable=True)
     
-    assigned_expert_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    sentence_position = Column(Integer, index=True, nullable=True)  # Global 1-7000 position
+    assigned_expert_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=True)
     verified_by = Column(String(50), nullable=True)
     verified_at = Column(DateTime, nullable=True)
     
@@ -38,6 +42,10 @@ class Sentence(Base):
     # Relationships
     tokens = relationship("Token", back_populates="sentence", cascade="all, delete-orphan", order_by="Token.token_id")
     assigned_expert = relationship("User", foreign_keys=[assigned_expert_id])
+
+    __table_args__ = (
+        Index('idx_sentence_expert_status', 'assigned_expert_id', 'status'),
+    )
 
 
 class Token(Base):

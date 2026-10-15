@@ -10,7 +10,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     
     # Database: SQLite for effortless local dev, PostgreSQL for production
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./sanskrit_pos.db")
+    _base_dir = os.path.dirname(os.path.abspath(__file__))
+    DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{os.path.join(_base_dir, 'sanskrit_pos.db')}")
     
     # Path to the 70% automatically annotated CSV
     # CRITICAL: Only the 70% portion is touched; 30% portion remains completely untouched
