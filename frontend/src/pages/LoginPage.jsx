@@ -13,7 +13,7 @@ export default function LoginPage({ onLoginSuccess }) {
       padding: '1.5rem'
     }}>
       <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '2.2rem', fontWeight: 800, color: '#102a43', letterSpacing: '-0.02em' }}>
+        <h1 className="sanskrit-text" style={{ fontSize: '2.2rem', fontWeight: 800, color: '#102a43', letterSpacing: '-0.02em' }}>
           संस्कृतपदविभागपरियोजना
         </h1>
         <p style={{ fontSize: '1.1rem', color: '#486581', marginTop: '0.5rem' }}>
