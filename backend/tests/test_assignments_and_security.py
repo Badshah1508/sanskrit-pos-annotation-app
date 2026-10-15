@@ -20,6 +20,18 @@ class TestSimultaneousExpertAssignmentsAndPersistence(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        # Reset any sentences modified during tests back to pending
+        cls.db.query(Sentence).filter(
+            Sentence.sentence_position >= 1001,
+            Sentence.sentence_position <= 7000,
+            Sentence.status.in_(["verified", "in_progress"])
+        ).update({
+            "status": "pending",
+            "verified_by": None,
+            "verified_at": None,
+            "annotation_note": None
+        }, synchronize_session=False)
+        cls.db.commit()
         cls.db.close()
 
     def test_01_user3_login_and_workspace_range(self):

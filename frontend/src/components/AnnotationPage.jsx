@@ -24,6 +24,8 @@ export default function AnnotationPage({
   const [completedAll, setCompletedAll] = useState(false);
   const [completionMessage, setCompletionMessage] = useState('');
 
+  const [nextSentenceError, setNextSentenceError] = useState(null);
+
   const displayName = activeUserLabel || user?.display_name || user?.username || 'Current Scholar';
   const displayRange = activeRangeLabel || '1,000 sentences';
 
@@ -32,12 +34,16 @@ export default function AnnotationPage({
     setSentence(null);
     setTokens([]);
     setNote('');
+    setNextSentenceError(null);
     loadNextSentence(workspace);
   }, [workspace]);
 
-  const loadNextSentence = async (targetWs = workspace) => {
+  const loadNextSentence = async (targetWs = workspace, isAfterSave = false, savedInfo = null) => {
     setLoading(true);
-    setFeedback(null);
+    if (!isAfterSave) {
+      setFeedback(null);
+    }
+    setNextSentenceError(null);
     setCompletedAll(false);
     try {
       const queryWs = (targetWs === 'all') ? null : targetWs;
@@ -46,27 +52,42 @@ export default function AnnotationPage({
         setSentence(null);
         setTokens([]);
         setCompletedAll(true);
-        setCompletionMessage(`All sentences assigned to ${displayName} (${displayRange}) have been verified!`);
+        setCompletionMessage(`All 1,000 sentences assigned to ${displayName} (${displayRange}) have been verified!`);
         return;
       }
       setSentence(data);
       setTokens(data.tokens || []);
       setNote(data.annotation_note || '');
       setHasUnsavedChanges(false);
-    } catch (err) {
-      setSentence(null);
-      setTokens([]);
-      if (err.response?.status === 404) {
-        setCompletedAll(true);
-        setCompletionMessage(err.response?.data?.detail || `All sentences assigned to ${displayName} (${displayRange}) have been verified!`);
-      } else {
+      if (isAfterSave && savedInfo) {
         setFeedback({
-          type: 'error',
-          text: 'Error fetching next sentence: ' + (err.response?.data?.detail || err.message || 'Unknown error')
+          type: 'success',
+          text: `✓ Sentence #${savedInfo.pos} (${savedInfo.annId}) verified & saved! Loaded next pending sentence #${data.sentence_position || data.id}.`
         });
+      }
+    } catch (err) {
+      if (err.response?.status === 404) {
+        setSentence(null);
+        setTokens([]);
+        setCompletedAll(true);
+        setCompletionMessage(err.response?.data?.detail || `All 1,000 sentences assigned to ${displayName} (${displayRange}) have been verified!`);
+      } else {
+        const errorDetail = err.response?.data?.detail || err.message || 'Unknown network error';
+        if (isAfterSave) {
+          // Keep save intact! Inform user that save succeeded, and provide retry button
+          setNextSentenceError(`Saved successfully! Failed to fetch next sentence: ${errorDetail}`);
+        } else {
+          setSentence(null);
+          setTokens([]);
+          setFeedback({
+            type: 'error',
+            text: 'Error fetching next sentence: ' + errorDetail
+          });
+        }
       }
     } finally {
       setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -89,6 +110,7 @@ export default function AnnotationPage({
     if (!sentence) return;
     setSaving(true);
     setFeedback(null);
+    setNextSentenceError(null);
     try {
       await annotationApi.saveDraft(sentence.annotation_id, {
         tokens,
@@ -113,7 +135,7 @@ export default function AnnotationPage({
   const handleSaveAndNext = async () => {
     if (!sentence) return;
 
-    // Validate that every token has an assigned Sanskrit Consortium tag
+    // 1. Client-side Completeness Validation
     const validation = validateSentenceForVerification(tokens);
     if (!validation.isValid) {
       setFeedback({
@@ -125,27 +147,46 @@ export default function AnnotationPage({
 
     setSaving(true);
     setFeedback(null);
+    setNextSentenceError(null);
+
+    const savedPos = sentence.sentence_position || sentence.sentence_id;
+    const savedAnnId = sentence.annotation_id;
+
+    // 2. Commit verification to database
     try {
-      await annotationApi.verifySentence(sentence.annotation_id, {
+      await annotationApi.verifySentence(savedAnnId, {
         tokens,
         note
       }, workspace);
+
       setHasUnsavedChanges(false);
       setFeedback({
         type: 'success',
-        text: `✓ Sentence #${sentence.sentence_position || sentence.sentence_id} (${sentence.annotation_id}) verified and saved to database!`
+        text: `✓ Sentence #${savedPos} (${savedAnnId}) successfully verified and committed to database!`
       });
-
-      // Immediate transition to the next pending sentence in this user's range
-      await loadNextSentence(workspace);
     } catch (err) {
+      // Step 5 failure handling: Keep current selections, show clear message, do not advance
+      const status = err.response?.status;
+      let errorDetail = err.response?.data?.detail || err.message || 'Unknown error';
+      if (status === 401) {
+        errorDetail = 'Session expired. Please log in again to save verification.';
+      } else if (status === 403) {
+        errorDetail = `Authorization error: ${errorDetail}`;
+      } else if (status === 422 || status === 400) {
+        errorDetail = `Validation error: ${errorDetail}`;
+      } else {
+        errorDetail = `Database save error: ${errorDetail}`;
+      }
       setFeedback({
         type: 'error',
-        text: 'Failed to verify sentence: ' + (err.response?.data?.detail || err.message)
+        text: `Save & Next failed for sentence #${savedPos}: ${errorDetail}`
       });
-    } finally {
       setSaving(false);
+      return;
     }
+
+    // 3. Save succeeded! Now fetch the next sentence in this expert's workspace
+    await loadNextSentence(workspace, true, { pos: savedPos, annId: savedAnnId });
   };
 
   const handleRequestDashboard = () => {
@@ -213,6 +254,22 @@ export default function AnnotationPage({
       {feedback && (
         <div className={`alert alert-${feedback.type}`}>
           {feedback.text}
+        </div>
+      )}
+
+      {/* Next sentence fetch error banner with Retry button */}
+      {nextSentenceError && (
+        <div className="alert alert-warning" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem', background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', borderRadius: 'var(--radius-md)', padding: '0.75rem 1rem' }}>
+          <div>
+            <strong>✓ Annotation saved successfully!</strong> {nextSentenceError}
+          </div>
+          <button
+            className="btn btn-primary"
+            style={{ padding: '0.4rem 1rem', fontSize: '0.875rem' }}
+            onClick={() => loadNextSentence(workspace)}
+          >
+            ↻ Retry Loading Next Sentence
+          </button>
         </div>
       )}
 

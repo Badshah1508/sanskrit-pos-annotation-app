@@ -126,13 +126,13 @@ export const authApi = {
 };
 
 export const WORKSPACE_BOUNDS = {
-  user1: { num: 1, label: 'User 1', start: 1, end: 1000, docs: 868, sentences: 1000, firstPendingId: '5_2' },
-  user2: { num: 2, label: 'User 2', start: 1001, end: 2000, docs: 874, sentences: 1000, firstPendingId: '869_3' },
-  user3: { num: 3, label: 'User 3', start: 2001, end: 3000, docs: 890, sentences: 1000, firstPendingId: '1139_0' },
-  user4: { num: 4, label: 'User 4', start: 3001, end: 4000, docs: 883, sentences: 1000, firstPendingId: '2139_3' },
-  user5: { num: 5, label: 'User 5', start: 4001, end: 5000, docs: 879, sentences: 1000, firstPendingId: '799_9' },
-  user6: { num: 6, label: 'User 6', start: 5001, end: 6000, docs: 866, sentences: 1000, firstPendingId: '936_2' },
-  user7: { num: 7, label: 'User 7', start: 6001, end: 7000, docs: 889, sentences: 1000, firstPendingId: '3318_2' }
+  user1: { num: 1, label: 'User 1', start: 1, end: 1000, docs: 868, sentences: 1000 },
+  user2: { num: 2, label: 'User 2', start: 1001, end: 2000, docs: 874, sentences: 1000 },
+  user3: { num: 3, label: 'User 3', start: 2001, end: 3000, docs: 890, sentences: 1000 },
+  user4: { num: 4, label: 'User 4', start: 3001, end: 4000, docs: 883, sentences: 1000 },
+  user5: { num: 5, label: 'User 5', start: 4001, end: 5000, docs: 879, sentences: 1000 },
+  user6: { num: 6, label: 'User 6', start: 5001, end: 6000, docs: 866, sentences: 1000 },
+  user7: { num: 7, label: 'User 7', start: 6001, end: 7000, docs: 889, sentences: 1000 }
 };
 
 export const datasetApi = {
@@ -154,7 +154,6 @@ export const datasetApi = {
       const response = await apiClient.get('/dataset/workspaces');
       return response.data;
     } catch (e) {
-      // Resilient fallback if backend has not deployed /workspaces route yet
       return Object.values(WORKSPACE_BOUNDS).map(w => ({
         id: w.num,
         key: `user${w.num}`,
@@ -194,7 +193,7 @@ export const datasetApi = {
         return data;
       }
 
-      // If cloud backend returned global 7000 stats instead of per-workspace stats
+      // Fallback calculation if backend returned aggregate stats
       if (wsRange && cleanWs !== 'all') {
         const verifiedCount = data.verified_sentences || 0;
         return {
@@ -267,7 +266,7 @@ export const datasetApi = {
       try {
         const savedSentence = await datasetApi.getSentenceByAnnotationId(savedResumeId);
         const pos = savedSentence.sentence_position || savedSentence.id;
-        if (wsRange && pos >= wsRange.start && pos <= wsRange.end && savedSentence.status !== 'verified') {
+        if (wsRange && pos >= wsRange.start && pos <= wsRange.end && savedSentence.status === 'in_progress') {
           return savedSentence;
         }
       } catch (e) {
@@ -276,43 +275,21 @@ export const datasetApi = {
     }
 
     // 2. Query backend for next sentence
-    try {
-      const response = await apiClient.get('/dataset/sentences/next', {
-        params: workspace ? { workspace } : {}
-      });
-      const data = response.data;
+    const response = await apiClient.get('/dataset/sentences/next', {
+      params: workspace ? { workspace } : {}
+    });
+    const data = response.data;
 
-      // 3. Strict Range Verification: verify sentence_position strictly belongs to this user
-      if (wsRange && data) {
-        const pos = data.sentence_position || data.id;
-        if (pos >= wsRange.start && pos <= wsRange.end) {
-          return data;
-        }
-        console.warn(`[RANGE SAFETY] Backend returned position #${pos} outside ${wsRange.label} range (${wsRange.start}-${wsRange.end}). Enforcing range filter.`);
-      } else if (!wsRange) {
+    // 3. Strict Server-Side Range & Status Verification
+    if (wsRange && data) {
+      const pos = data.sentence_position || data.id;
+      if (pos >= wsRange.start && pos <= wsRange.end) {
         return data;
       }
-    } catch (err) {
-      if (err.response?.status === 404) {
-        throw err;
-      }
-      console.warn('Backend /dataset/sentences/next error:', err.message);
+      throw new Error(`Server returned sentence #${pos} outside assigned range for ${wsRange.label} (${wsRange.start}–${wsRange.end}).`);
     }
 
-    // 4. Defensive client guard: fetch first eligible annotation for this workspace directly
-    if (wsRange && wsRange.firstPendingId) {
-      try {
-        const directSentence = await datasetApi.getSentenceByAnnotationId(wsRange.firstPendingId);
-        const pos = directSentence.sentence_position || directSentence.id;
-        if (pos >= wsRange.start && pos <= wsRange.end) {
-          return directSentence;
-        }
-      } catch (e) {
-        console.error(`Failed to fetch default first pending sentence for ${cleanWs}:`, e);
-      }
-    }
-
-    throw new Error(`Unable to fetch an annotation in ${wsRange?.label || cleanWs} range.`);
+    return data;
   },
 
   getSentenceByAnnotationId: async (annotationId) => {

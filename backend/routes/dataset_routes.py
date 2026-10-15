@@ -25,24 +25,35 @@ WORKSPACE_DEFS = [
 
 def resolve_sentence_position_range(workspace: Optional[str], current_user: User) -> tuple:
     """
-    Resolves (start_pos, end_pos, label).
-    If a specific workspace is requested via query param (e.g. user1..user7),
-    returns the exact bounds for that expert workspace.
-    If no workspace is specified, defaults to current_user's assigned range.
+    Resolves (start_pos, end_pos, label) based on requested workspace and user authentication.
+    - If a valid workspace key is provided (e.g. 'user1'..'user7'), resolves to that workspace range.
+    - If workspace is 'all' and user is admin, resolves to the full dataset (1–7,000).
+    - If workspace is omitted, defaults to the authenticated user's assigned range.
     """
     if workspace:
         clean_ws = workspace.strip().lower().replace(" ", "").replace("_", "")
         if clean_ws == "all":
-            return 1, 7000, "All Workspaces (Administrator Overview)"
+            if current_user.role == "admin":
+                return 1, 7000, "All Workspaces (Administrator Overview)"
+            # Non-admin requesting 'all' defaults to their assigned range
+            start_pos = current_user.assigned_range_start or 1
+            end_pos = current_user.assigned_range_end or 1000
+            return start_pos, end_pos, current_user.display_name or current_user.username
+
         for w in WORKSPACE_DEFS:
             if clean_ws in [w["key"], f"user{w['num']}", str(w["num"])]:
                 return w["start"], w["end"], w["label"]
 
-    # Fall back to authenticated user's assigned range
-    start_pos = current_user.assigned_range_start or 1
-    end_pos = current_user.assigned_range_end or 1000
-    user_label = current_user.display_name or current_user.username
-    return start_pos, end_pos, user_label
+    # When workspace is not specified, use authenticated user's assigned range
+    if current_user.assigned_range_start and current_user.assigned_range_end:
+        return (
+            current_user.assigned_range_start,
+            current_user.assigned_range_end,
+            current_user.display_name or current_user.username
+        )
+
+    # Default fallback for admin without assignment
+    return 1, 1000, "User 1"
 
 
 # Backwards compatibility alias
