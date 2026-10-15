@@ -3,13 +3,13 @@ import { datasetApi } from '../api';
 import ProgressBar from './ProgressBar';
 
 const EXPERT_WORKSPACES = [
-  { key: 'user1', label: 'User 1', range: 'doc_id 1–1,000', docs: 1000, count: 2658 },
-  { key: 'user2', label: 'User 2', range: 'doc_id 1,001–2,000', docs: 1000, count: 2029 },
-  { key: 'user3', label: 'User 3', range: 'doc_id 2,001–3,000', docs: 1000, count: 1611 },
-  { key: 'user4', label: 'User 4', range: 'doc_id 3,001–4,000', docs: 597, count: 702 },
-  { key: 'user5', label: 'User 5', range: 'doc_id 4,001–5,000', docs: 0, count: 0 },
-  { key: 'user6', label: 'User 6', range: 'doc_id 5,001–6,000', docs: 0, count: 0 },
-  { key: 'user7', label: 'User 7', range: 'doc_id 6,001–7,000', docs: 0, count: 0 }
+  { key: 'user1', label: 'User 1', range: 'Sentences 1–1,000', docs: 868, count: 1000 },
+  { key: 'user2', label: 'User 2', range: 'Sentences 1,001–2,000', docs: 874, count: 1000 },
+  { key: 'user3', label: 'User 3', range: 'Sentences 2,001–3,000', docs: 890, count: 1000 },
+  { key: 'user4', label: 'User 4', range: 'Sentences 3,001–4,000', docs: 883, count: 1000 },
+  { key: 'user5', label: 'User 5', range: 'Sentences 4,001–5,000', docs: 879, count: 1000 },
+  { key: 'user6', label: 'User 6', range: 'Sentences 5,001–6,000', docs: 866, count: 1000 },
+  { key: 'user7', label: 'User 7', range: 'Sentences 6,001–7,000', docs: 889, count: 1000 }
 ];
 
 export default function Dashboard({
@@ -236,7 +236,7 @@ export default function Dashboard({
             👥 7 Expert Workspaces (Click to Switch Range)
           </h4>
           <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-            Assigned by document ID range • Simultaneous expert verification
+            Assigned by sentence position (1,000 sentences each) • Simultaneous expert verification
           </span>
         </div>
 

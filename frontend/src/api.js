@@ -126,13 +126,13 @@ export const authApi = {
 };
 
 export const WORKSPACE_BOUNDS = {
-  user1: { num: 1, label: 'User 1', start: 1, end: 1000, docs: 1000, sentences: 2658, firstPendingId: '1_0' },
-  user2: { num: 2, label: 'User 2', start: 1001, end: 2000, docs: 1000, sentences: 2029, firstPendingId: '1001_0' },
-  user3: { num: 3, label: 'User 3', start: 2001, end: 3000, docs: 1000, sentences: 1611, firstPendingId: '2001_0' },
-  user4: { num: 4, label: 'User 4', start: 3001, end: 4000, docs: 597, sentences: 702, firstPendingId: '3001_0' },
-  user5: { num: 5, label: 'User 5', start: 4001, end: 5000, docs: 0, sentences: 0, firstPendingId: null },
-  user6: { num: 6, label: 'User 6', start: 5001, end: 6000, docs: 0, sentences: 0, firstPendingId: null },
-  user7: { num: 7, label: 'User 7', start: 6001, end: 7000, docs: 0, sentences: 0, firstPendingId: null }
+  user1: { num: 1, label: 'User 1', start: 1, end: 1000, docs: 868, sentences: 1000, firstPendingId: '5_2' },
+  user2: { num: 2, label: 'User 2', start: 1001, end: 2000, docs: 874, sentences: 1000, firstPendingId: '869_3' },
+  user3: { num: 3, label: 'User 3', start: 2001, end: 3000, docs: 890, sentences: 1000, firstPendingId: '1139_0' },
+  user4: { num: 4, label: 'User 4', start: 3001, end: 4000, docs: 883, sentences: 1000, firstPendingId: '2139_3' },
+  user5: { num: 5, label: 'User 5', start: 4001, end: 5000, docs: 879, sentences: 1000, firstPendingId: '799_9' },
+  user6: { num: 6, label: 'User 6', start: 5001, end: 6000, docs: 866, sentences: 1000, firstPendingId: '936_2' },
+  user7: { num: 7, label: 'User 7', start: 6001, end: 7000, docs: 889, sentences: 1000, firstPendingId: '3318_2' }
 };
 
 export const datasetApi = {
@@ -143,7 +143,7 @@ export const datasetApi = {
         key: `user${w.num}`,
         label: w.label,
         username: `user${w.num}`,
-        range_label: `doc_id ${w.start.toLocaleString()}–${w.end.toLocaleString()}`,
+        range_label: `Sentences ${w.start.toLocaleString()}–${w.end.toLocaleString()}`,
         range_start: w.start,
         range_end: w.end,
         total_documents: w.docs,
@@ -160,7 +160,7 @@ export const datasetApi = {
         key: `user${w.num}`,
         label: w.label,
         username: `user${w.num}`,
-        range_label: `doc_id ${w.start.toLocaleString()}–${w.end.toLocaleString()}`,
+        range_label: `Sentences ${w.start.toLocaleString()}–${w.end.toLocaleString()}`,
         range_start: w.start,
         range_end: w.end,
         total_documents: w.docs,
@@ -176,7 +176,7 @@ export const datasetApi = {
         ...MOCK_DATA.stats,
         total_sentences: workspace ? 1000 : MOCK_DATA.stats.total_sentences,
         workspace_label: workspace ? `User ${workspace.replace('user', '')}` : 'All Workspaces',
-        assigned_range: workspace ? 'Assigned 1,000 sentences' : '1–7,000'
+        assigned_range: workspace ? 'Assigned 1,000 sentences' : 'Sentences 1–7,000'
       };
     }
 
@@ -189,8 +189,8 @@ export const datasetApi = {
       });
       const data = response.data;
 
-      // If backend returned valid per-workspace stats with total_documents populated
-      if (wsRange && data.total_documents !== undefined && data.total_documents !== null && data.total_documents <= wsRange.docs) {
+      // If backend returned valid per-workspace stats with total_sentences populated
+      if (wsRange && data.total_sentences !== undefined && data.total_sentences !== null && data.total_sentences <= wsRange.sentences) {
         return data;
       }
 
@@ -208,7 +208,7 @@ export const datasetApi = {
           completion_percentage: wsRange.sentences > 0 ? Number(((cleanWs === 'user1' ? verifiedCount : 0) / wsRange.sentences * 100).toFixed(2)) : 0,
           expert_verified: cleanWs === 'user1' ? verifiedCount : 0,
           workspace_label: wsRange.label,
-          assigned_range: `doc_id ${wsRange.start.toLocaleString()}–${wsRange.end.toLocaleString()}`
+          assigned_range: `Sentences ${wsRange.start.toLocaleString()}–${wsRange.end.toLocaleString()}`
         };
       }
 
@@ -226,7 +226,7 @@ export const datasetApi = {
           completion_percentage: 0,
           expert_verified: 0,
           workspace_label: wsRange.label,
-          assigned_range: `doc_id ${wsRange.start.toLocaleString()}–${wsRange.end.toLocaleString()}`
+          assigned_range: `Sentences ${wsRange.start.toLocaleString()}–${wsRange.end.toLocaleString()}`
         };
       }
       throw err;
@@ -244,7 +244,7 @@ export const datasetApi = {
         sentence_id: 0,
         annotation_id: `${basePos}_0`,
         sentence_position: basePos,
-        sentence_text: `संस्कृतवार्तापत्रे अयं वाक्यविशेषः (doc_id ${basePos}) अधुना परीक्षार्थं दर्शितः ।`,
+        sentence_text: `संस्कृतवार्तापत्रे अयं वाक्यविशेषः (स्थितिः ${basePos}) अधुना परीक्षार्थं दर्शितः ।`,
         status: 'pending',
         annotation_note: '',
         tokens: [
@@ -261,25 +261,13 @@ export const datasetApi = {
     const cleanWs = (workspace || 'user1').toLowerCase().replace(/[\s_]/g, '');
     const wsRange = WORKSPACE_BOUNDS[cleanWs];
 
-    // If workspace has 0 documents (Users 5, 6, 7), immediately throw 404
-    if (wsRange && wsRange.docs === 0) {
-      const err = new Error(`No sentences exist in ${wsRange.label} range (doc_id ${wsRange.start}–${wsRange.end}).`);
-      err.response = {
-        status: 404,
-        data: {
-          detail: `All sentences in the 70% annotation queue end at doc_id 3,597. There are no documents in ${wsRange.label} (doc_id ${wsRange.start.toLocaleString()}–${wsRange.end.toLocaleString()}).`
-        }
-      };
-      throw err;
-    }
-
     // 1. Check user-specific saved draft in localStorage first
     const savedResumeId = localStorage.getItem(`resume_annotation_${cleanWs}`);
     if (savedResumeId) {
       try {
         const savedSentence = await datasetApi.getSentenceByAnnotationId(savedResumeId);
-        const docNum = parseInt(savedSentence.doc_id, 10);
-        if (wsRange && docNum >= wsRange.start && docNum <= wsRange.end && savedSentence.status !== 'verified') {
+        const pos = savedSentence.sentence_position || savedSentence.id;
+        if (wsRange && pos >= wsRange.start && pos <= wsRange.end && savedSentence.status !== 'verified') {
           return savedSentence;
         }
       } catch (e) {
@@ -294,13 +282,13 @@ export const datasetApi = {
       });
       const data = response.data;
 
-      // 3. Strict Range Verification: verify doc_id strictly belongs to this user
-      if (wsRange && data && data.doc_id) {
-        const docNum = parseInt(data.doc_id, 10);
-        if (docNum >= wsRange.start && docNum <= wsRange.end) {
+      // 3. Strict Range Verification: verify sentence_position strictly belongs to this user
+      if (wsRange && data) {
+        const pos = data.sentence_position || data.id;
+        if (pos >= wsRange.start && pos <= wsRange.end) {
           return data;
         }
-        console.warn(`[RANGE SAFETY] Backend returned doc_id ${data.doc_id} outside ${wsRange.label} range (${wsRange.start}-${wsRange.end}). Enforcing range filter.`);
+        console.warn(`[RANGE SAFETY] Backend returned position #${pos} outside ${wsRange.label} range (${wsRange.start}-${wsRange.end}). Enforcing range filter.`);
       } else if (!wsRange) {
         return data;
       }
@@ -315,8 +303,8 @@ export const datasetApi = {
     if (wsRange && wsRange.firstPendingId) {
       try {
         const directSentence = await datasetApi.getSentenceByAnnotationId(wsRange.firstPendingId);
-        const docNum = parseInt(directSentence.doc_id, 10);
-        if (docNum >= wsRange.start && docNum <= wsRange.end) {
+        const pos = directSentence.sentence_position || directSentence.id;
+        if (pos >= wsRange.start && pos <= wsRange.end) {
           return directSentence;
         }
       } catch (e) {

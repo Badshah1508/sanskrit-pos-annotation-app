@@ -57,20 +57,19 @@ def get_pending_sentences(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Returns a paginated list of pending sentences within the expert's assigned doc_id range."""
-    from routes.dataset_routes import resolve_doc_id_range
-    start_doc, end_doc, _ = resolve_doc_id_range(workspace, current_user)
-    doc_num = cast(Sentence.doc_id, Integer)
+    """Returns a paginated list of pending sentences within the expert's assigned sentence_position range."""
+    from routes.dataset_routes import resolve_sentence_position_range
+    start_pos, end_pos, _ = resolve_sentence_position_range(workspace, current_user)
 
     return (
         db.query(Sentence)
         .options(selectinload(Sentence.tokens))
         .filter(
             Sentence.status == "pending",
-            doc_num >= start_doc,
-            doc_num <= end_doc
+            Sentence.sentence_position >= start_pos,
+            Sentence.sentence_position <= end_pos
         )
-        .order_by(doc_num.asc(), Sentence.sentence_id.asc(), Sentence.id.asc())
+        .order_by(Sentence.sentence_position.asc())
         .offset(offset)
         .limit(limit)
         .all()
@@ -84,20 +83,19 @@ def get_verified_sentences(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Returns a paginated list of expert-verified sentences within the expert's assigned doc_id range."""
-    from routes.dataset_routes import resolve_doc_id_range
-    start_doc, end_doc, _ = resolve_doc_id_range(workspace, current_user)
-    doc_num = cast(Sentence.doc_id, Integer)
+    """Returns a paginated list of expert-verified sentences within the expert's assigned sentence_position range."""
+    from routes.dataset_routes import resolve_sentence_position_range
+    start_pos, end_pos, _ = resolve_sentence_position_range(workspace, current_user)
 
     return (
         db.query(Sentence)
         .options(selectinload(Sentence.tokens))
         .filter(
             Sentence.status == "verified",
-            doc_num >= start_doc,
-            doc_num <= end_doc
+            Sentence.sentence_position >= start_pos,
+            Sentence.sentence_position <= end_pos
         )
-        .order_by(doc_num.asc(), Sentence.sentence_id.asc(), Sentence.id.asc())
+        .order_by(Sentence.sentence_position.asc())
         .offset(offset)
         .limit(limit)
         .all()

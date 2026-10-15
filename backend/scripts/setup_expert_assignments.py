@@ -128,23 +128,27 @@ def setup_assignments(db=None):
 
         db.commit()
 
-        # 3. High-Performance Bulk Range Assignment by doc_id
-        print("\nExecuting bulk range assignment by doc_id (ranges 1–1,000, 1,001–2,000, etc.)...")
+        # 3. High-Performance Bulk Range Assignment by global sentence_position
+        print("\nExecuting bulk range assignment by sentence_position (1–1,000, 1,001–2,000, etc.)...")
+        # Reset existing assignments to prevent carry-over from previous runs
+        db.execute(text("UPDATE sentences SET assigned_expert_id = NULL"))
+        db.commit()
+
         assignment_counts = {}
 
         for cfg in EXPERT_CONFIGS:
             u_num = cfg["user_num"]
             assigned_user = user_map[u_num]
-            start_doc = cfg["start"]
-            end_doc = cfg["end"]
+            start_pos = cfg["start"]
+            end_pos = cfg["end"]
 
             db.execute(
                 text("""
                     UPDATE sentences
                     SET assigned_expert_id = :user_id
-                    WHERE CAST(doc_id AS INTEGER) >= :start_doc AND CAST(doc_id AS INTEGER) <= :end_doc
+                    WHERE sentence_position >= :start_pos AND sentence_position <= :end_pos
                 """),
-                {"user_id": assigned_user.id, "start_doc": start_doc, "end_doc": end_doc}
+                {"user_id": assigned_user.id, "start_pos": start_pos, "end_pos": end_pos}
             )
 
             # Query count for this range
@@ -152,7 +156,9 @@ def setup_assignments(db=None):
                 Sentence.assigned_expert_id == assigned_user.id
             ).scalar()
             assignment_counts[u_num] = cnt
-            print(f"User {u_num} ({assigned_user.username}): Assigned doc_id Range {start_doc}–{end_doc} | Total: {cnt} sentences")
+            print(f"User {u_num} ({assigned_user.username}): Assigned Sentences {start_pos}–{end_pos} | Total: {cnt} sentences")
+            if cnt != 1000:
+                raise ValueError(f"Error: User {u_num} got {cnt} sentences instead of exactly 1,000!")
 
         db.commit()
 
@@ -162,7 +168,7 @@ def setup_assignments(db=None):
             raise ValueError(f"Integrity check failed: Expected total 7000 sentences assigned, got: {total_assigned}")
 
         print("\n==================================================================")
-        print("ALL CHECKS PASSED: 7,000 sentences assigned by doc_id cleanly.")
+        print("ALL CHECKS PASSED: 7,000 sentences assigned by sentence_position cleanly.")
         print("Each expert has exactly 1,000 sentences with zero gaps and zero overlaps.")
         print("Existing annotations, notes, and timestamps have been 100% preserved.")
         print("==================================================================")
@@ -172,4 +178,19 @@ def setup_assignments(db=None):
             db.close()
 
 if __name__ == "__main__":
-    setup_assignments()
+    import argparse
+    parser = argparse.ArgumentParser(description="Assign 7000 sentences to 7 experts by sentence_position")
+    parser.add_argument("--db-url", type=str, default=None, help="Database URL (e.g. Neon PostgreSQL URL)")
+    args = parser.parse_args()
+
+    if args.db_url:
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        engine = create_engine(args.db_url)
+        CustomSession = sessionmaker(bind=engine)
+        db_session = CustomSession()
+        setup_assignments(db=db_session)
+        db_session.close()
+    else:
+        setup_assignments()
+

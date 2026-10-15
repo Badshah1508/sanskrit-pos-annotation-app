@@ -24,18 +24,15 @@ def save_sentence_draft(
             detail=f"Sentence with annotation_id '{annotation_id}' not found."
         )
 
-    # Server-side security check: expert cannot save drafts outside their assigned doc_id range
+    # Server-side security check: expert cannot save drafts outside their assigned sentence_position range
     if user.role != "admin":
         r_start = user.assigned_range_start or 1
         r_end = user.assigned_range_end or 1000
-        try:
-            doc_num = int(sentence.doc_id)
-        except (ValueError, TypeError):
-            doc_num = 0
-        if doc_num < r_start or doc_num > r_end:
+        pos = sentence.sentence_position or 0
+        if pos < r_start or pos > r_end:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access forbidden: Sentence '{annotation_id}' belongs to doc_id {sentence.doc_id}, which is outside your assigned range ({r_start:,}–{r_end:,})."
+                detail=f"Access forbidden: Sentence '{annotation_id}' is at position #{pos}, which is outside your assigned sentence range ({r_start:,}–{r_end:,})."
             )
 
     # Map input by token_id
@@ -84,18 +81,15 @@ def verify_sentence_annotation(
             detail=f"Sentence with annotation_id '{annotation_id}' not found."
         )
 
-    # Server-side security check: expert cannot verify sentences outside their assigned doc_id range
+    # Server-side security check: expert cannot verify sentences outside their assigned sentence_position range
     if user.role != "admin":
         r_start = user.assigned_range_start or 1
         r_end = user.assigned_range_end or 1000
-        try:
-            doc_num = int(sentence.doc_id)
-        except (ValueError, TypeError):
-            doc_num = 0
-        if doc_num < r_start or doc_num > r_end:
+        pos = sentence.sentence_position or 0
+        if pos < r_start or pos > r_end:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access forbidden: Sentence '{annotation_id}' belongs to doc_id {sentence.doc_id}, which is outside your assigned range ({r_start:,}–{r_end:,})."
+                detail=f"Access forbidden: Sentence '{annotation_id}' is at position #{pos}, which is outside your assigned sentence range ({r_start:,}–{r_end:,})."
             )
 
     # Determine actor identity for verified_by
