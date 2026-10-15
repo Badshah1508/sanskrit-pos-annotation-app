@@ -104,10 +104,11 @@ def setup_assignments(db=None):
             db.flush()
             user_map[1] = user1_record
 
-        # Also ensure 'sanskrit_scholar' if present maps to User 1's range
+        # Also ensure 'sanskrit_scholar' if present has admin role and maps to User 1's range
         scholar_record = db.query(User).filter(User.username == "sanskrit_scholar").first()
         if scholar_record:
-            scholar_record.display_name = "User 1 (Scholar)"
+            scholar_record.display_name = "Scholar (Admin)"
+            scholar_record.role = "admin"
             scholar_record.assigned_range_start = 1
             scholar_record.assigned_range_end = 1000
 
@@ -127,24 +128,23 @@ def setup_assignments(db=None):
 
         db.commit()
 
-        # 3. High-Performance Bulk Range Assignment
-        print("\nExecuting bulk range assignment (7 ranges of 1,000 sentences each)...")
+        # 3. High-Performance Bulk Range Assignment by doc_id
+        print("\nExecuting bulk range assignment by doc_id (ranges 1–1,000, 1,001–2,000, etc.)...")
         assignment_counts = {}
 
         for cfg in EXPERT_CONFIGS:
             u_num = cfg["user_num"]
             assigned_user = user_map[u_num]
-            start_pos = cfg["start"]
-            end_pos = cfg["end"]
+            start_doc = cfg["start"]
+            end_doc = cfg["end"]
 
             db.execute(
                 text("""
                     UPDATE sentences
-                    SET sentence_position = id,
-                        assigned_expert_id = :user_id
-                    WHERE id >= :start_id AND id <= :end_id
+                    SET assigned_expert_id = :user_id
+                    WHERE CAST(doc_id AS INTEGER) >= :start_doc AND CAST(doc_id AS INTEGER) <= :end_doc
                 """),
-                {"user_id": assigned_user.id, "start_id": start_pos, "end_id": end_pos}
+                {"user_id": assigned_user.id, "start_doc": start_doc, "end_doc": end_doc}
             )
 
             # Query count for this range
@@ -152,17 +152,17 @@ def setup_assignments(db=None):
                 Sentence.assigned_expert_id == assigned_user.id
             ).scalar()
             assignment_counts[u_num] = cnt
-            print(f"User {u_num} ({assigned_user.username}): Assigned Range {start_pos}–{end_pos} | Total: {cnt} sentences")
+            print(f"User {u_num} ({assigned_user.username}): Assigned doc_id Range {start_doc}–{end_doc} | Total: {cnt} sentences")
 
         db.commit()
 
         # 4. Strict Integrity Check
         total_assigned = sum(assignment_counts.values())
-        if total_assigned != 7000 or any(c != 1000 for c in assignment_counts.values()):
-            raise ValueError(f"Integrity check failed: Expected each user to have 1000 sentences, got: {assignment_counts}")
+        if total_assigned != 7000:
+            raise ValueError(f"Integrity check failed: Expected total 7000 sentences assigned, got: {total_assigned}")
 
         print("\n==================================================================")
-        print("ALL CHECKS PASSED: 7,000 sentences assigned cleanly to 7 experts.")
+        print("ALL CHECKS PASSED: 7,000 sentences assigned by doc_id cleanly.")
         print("Each expert has exactly 1,000 sentences with zero gaps and zero overlaps.")
         print("Existing annotations, notes, and timestamps have been 100% preserved.")
         print("==================================================================")

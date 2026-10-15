@@ -8,14 +8,14 @@ import './styles/global.css';
 import './styles/annotation.css';
 
 const WORKSPACE_MAP = {
-  user1: { label: 'User 1', range: '1–1,000', start: 1, end: 1000 },
-  user2: { label: 'User 2', range: '1,001–2,000', start: 1001, end: 2000 },
-  user3: { label: 'User 3', range: '2,001–3,000', start: 2001, end: 3000 },
-  user4: { label: 'User 4', range: '3,001–4,000', start: 3001, end: 4000 },
-  user5: { label: 'User 5', range: '4,001–5,000', start: 4001, end: 5000 },
-  user6: { label: 'User 6', range: '5,001–6,000', start: 5001, end: 6000 },
-  user7: { label: 'User 7', range: '6,001–7,000', start: 6001, end: 7000 },
-  all:   { label: 'All Users', range: '1–7,000', start: 1, end: 7000 }
+  user1: { label: 'User 1', range: 'doc_id 1–1,000', start: 1, end: 1000, docs: 1000, sentences: 2658 },
+  user2: { label: 'User 2', range: 'doc_id 1,001–2,000', start: 1001, end: 2000, docs: 1000, sentences: 2029 },
+  user3: { label: 'User 3', range: 'doc_id 2,001–3,000', start: 2001, end: 3000, docs: 1000, sentences: 1611 },
+  user4: { label: 'User 4', range: 'doc_id 3,001–4,000', start: 3001, end: 4000, docs: 597, sentences: 702 },
+  user5: { label: 'User 5', range: 'doc_id 4,001–5,000', start: 4001, end: 5000, docs: 0, sentences: 0 },
+  user6: { label: 'User 6', range: 'doc_id 5,001–6,000', start: 5001, end: 6000, docs: 0, sentences: 0 },
+  user7: { label: 'User 7', range: 'doc_id 6,001–7,000', start: 6001, end: 7000, docs: 0, sentences: 0 },
+  all:   { label: 'All Users', range: 'doc_id 1–7,000', start: 1, end: 7000, docs: 3597, sentences: 7000 }
 };
 
 // Helper to determine initial workspace key from user account
@@ -78,6 +78,13 @@ export default function App() {
 
   const handleWorkspaceChange = (e) => {
     const ws = e.target.value;
+    if (user?.role !== 'admin') {
+      const initWs = resolveInitialWorkspace(user);
+      if (ws !== initWs) {
+        alert(`You are logged in as ${user.display_name || user.username}. Your assigned workspace is ${WORKSPACE_MAP[initWs]?.label || initWs} (${WORKSPACE_MAP[initWs]?.range}). To work on another workspace, please log in with that expert account or as admin.`);
+        return;
+      }
+    }
     setSelectedWorkspace(ws);
     if (user?.role === 'admin') {
       localStorage.setItem('last_admin_workspace', ws);

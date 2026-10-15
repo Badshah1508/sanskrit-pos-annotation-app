@@ -3,13 +3,13 @@ import { datasetApi } from '../api';
 import ProgressBar from './ProgressBar';
 
 const EXPERT_WORKSPACES = [
-  { key: 'user1', label: 'User 1', range: '1–1,000', count: 1000 },
-  { key: 'user2', label: 'User 2', range: '1,001–2,000', count: 1000 },
-  { key: 'user3', label: 'User 3', range: '2,001–3,000', count: 1000 },
-  { key: 'user4', label: 'User 4', range: '3,001–4,000', count: 1000 },
-  { key: 'user5', label: 'User 5', range: '4,001–5,000', count: 1000 },
-  { key: 'user6', label: 'User 6', range: '5,001–6,000', count: 1000 },
-  { key: 'user7', label: 'User 7', range: '6,001–7,000', count: 1000 }
+  { key: 'user1', label: 'User 1', range: 'doc_id 1–1,000', docs: 1000, count: 2658 },
+  { key: 'user2', label: 'User 2', range: 'doc_id 1,001–2,000', docs: 1000, count: 2029 },
+  { key: 'user3', label: 'User 3', range: 'doc_id 2,001–3,000', docs: 1000, count: 1611 },
+  { key: 'user4', label: 'User 4', range: 'doc_id 3,001–4,000', docs: 597, count: 702 },
+  { key: 'user5', label: 'User 5', range: 'doc_id 4,001–5,000', docs: 0, count: 0 },
+  { key: 'user6', label: 'User 6', range: 'doc_id 5,001–6,000', docs: 0, count: 0 },
+  { key: 'user7', label: 'User 7', range: 'doc_id 6,001–7,000', docs: 0, count: 0 }
 ];
 
 export default function Dashboard({
@@ -44,7 +44,7 @@ export default function Dashboard({
   };
 
   const displayName = activeUserLabel || user?.display_name || user?.username || 'Expert';
-  const displayRange = activeRangeLabel || stats?.assigned_range || '1,000 sentences';
+  const displayRange = stats?.assigned_range || activeRangeLabel || 'doc_id 1–1,000';
 
   if (loading) {
     return (
@@ -77,7 +77,7 @@ export default function Dashboard({
             Welcome, {displayName}!
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginTop: '0.2rem' }}>
-            Current Workspace: <strong style={{ color: '#1e293b' }}>{displayName}</strong> • Assigned Sentences: <strong style={{ color: '#1e293b' }}>{displayRange}</strong>
+            Current Workspace: <strong style={{ color: '#1e293b' }}>{displayName}</strong> • Assigned Range: <strong style={{ color: '#1e293b' }}>{displayRange}</strong>
           </p>
         </div>
 
@@ -127,7 +127,7 @@ export default function Dashboard({
       {/* Stats Cards Grid */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
         gap: '1.25rem',
         marginBottom: '2rem'
       }}>
@@ -138,11 +138,29 @@ export default function Dashboard({
           border: '1px solid var(--border-color)',
           boxShadow: 'var(--shadow-sm)'
         }}>
+          <div style={{ color: '#6366f1', fontSize: '0.85rem', fontWeight: 600, textTransform: 'uppercase' }}>
+            Assigned Documents
+          </div>
+          <div style={{ fontSize: '2rem', fontWeight: 700, color: '#312e81', marginTop: '0.25rem' }}>
+            {stats?.total_documents ?? 0}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.25rem' }}>
+            Unique news articles
+          </div>
+        </div>
+
+        <div style={{
+          background: 'white',
+          padding: '1.25rem',
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--border-color)',
+          boxShadow: 'var(--shadow-sm)'
+        }}>
           <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600, textTransform: 'uppercase' }}>
-            Total Assigned
+            Total Sentences
           </div>
           <div style={{ fontSize: '2rem', fontWeight: 700, color: '#1e293b', marginTop: '0.25rem' }}>
-            {stats?.total_sentences || 1000}
+            {stats?.total_sentences || 0}
           </div>
           <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.25rem' }}>
             {stats?.total_tokens || 0} tokens in range
@@ -218,7 +236,7 @@ export default function Dashboard({
             👥 7 Expert Workspaces (Click to Switch Range)
           </h4>
           <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-            1,000 sentences each • Simultaneous expert verification
+            Assigned by document ID range • Simultaneous expert verification
           </span>
         </div>
 
@@ -248,7 +266,7 @@ export default function Dashboard({
                 {w.range}
               </div>
               <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#047857', marginTop: '0.25rem' }}>
-                1,000 sentences
+                {w.docs} docs • {w.count.toLocaleString()} sents
               </div>
             </div>
           ))}

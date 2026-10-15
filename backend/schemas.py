@@ -92,13 +92,16 @@ class WorkspaceInfo(BaseModel):
     range_label: str
     range_start: int
     range_end: int
+    total_documents: Optional[int] = None
     total_sentences: int
 
 class DatasetStatsResponse(BaseModel):
+    total_documents: Optional[int] = None
     total_sentences: int
     pending_sentences: int
     in_progress_sentences: int
     verified_sentences: int
+    verified_documents: Optional[int] = None
     total_tokens: int
     completion_percentage: float
     expert_verified: int

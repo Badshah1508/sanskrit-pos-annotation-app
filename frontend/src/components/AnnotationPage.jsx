@@ -28,6 +28,10 @@ export default function AnnotationPage({
   const displayRange = activeRangeLabel || '1,000 sentences';
 
   useEffect(() => {
+    // Immediately clear current sentence so stale data is never shown
+    setSentence(null);
+    setTokens([]);
+    setNote('');
     loadNextSentence(workspace);
   }, [workspace]);
 
@@ -40,8 +44,9 @@ export default function AnnotationPage({
       const data = await datasetApi.getNextSentence(queryWs);
       if (!data) {
         setSentence(null);
+        setTokens([]);
         setCompletedAll(true);
-        setCompletionMessage(`All 1,000 pending sentences assigned to ${displayName} (${displayRange}) have been verified!`);
+        setCompletionMessage(`All sentences assigned to ${displayName} (${displayRange}) have been verified!`);
         return;
       }
       setSentence(data);
@@ -49,10 +54,11 @@ export default function AnnotationPage({
       setNote(data.annotation_note || '');
       setHasUnsavedChanges(false);
     } catch (err) {
+      setSentence(null);
+      setTokens([]);
       if (err.response?.status === 404) {
-        setSentence(null);
         setCompletedAll(true);
-        setCompletionMessage(err.response?.data?.detail || `All 1,000 sentences assigned to ${displayName} (${displayRange}) have been verified!`);
+        setCompletionMessage(err.response?.data?.detail || `All sentences assigned to ${displayName} (${displayRange}) have been verified!`);
       } else {
         setFeedback({
           type: 'error',

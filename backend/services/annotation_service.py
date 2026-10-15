@@ -24,6 +24,20 @@ def save_sentence_draft(
             detail=f"Sentence with annotation_id '{annotation_id}' not found."
         )
 
+    # Server-side security check: expert cannot save drafts outside their assigned doc_id range
+    if user.role != "admin":
+        r_start = user.assigned_range_start or 1
+        r_end = user.assigned_range_end or 1000
+        try:
+            doc_num = int(sentence.doc_id)
+        except (ValueError, TypeError):
+            doc_num = 0
+        if doc_num < r_start or doc_num > r_end:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access forbidden: Sentence '{annotation_id}' belongs to doc_id {sentence.doc_id}, which is outside your assigned range ({r_start:,}–{r_end:,})."
+            )
+
     # Map input by token_id
     tag_map = {t.token_id: t for t in token_inputs}
 
@@ -69,6 +83,20 @@ def verify_sentence_annotation(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Sentence with annotation_id '{annotation_id}' not found."
         )
+
+    # Server-side security check: expert cannot verify sentences outside their assigned doc_id range
+    if user.role != "admin":
+        r_start = user.assigned_range_start or 1
+        r_end = user.assigned_range_end or 1000
+        try:
+            doc_num = int(sentence.doc_id)
+        except (ValueError, TypeError):
+            doc_num = 0
+        if doc_num < r_start or doc_num > r_end:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access forbidden: Sentence '{annotation_id}' belongs to doc_id {sentence.doc_id}, which is outside your assigned range ({r_start:,}–{r_end:,})."
+            )
 
     # Determine actor identity for verified_by
     verifier_name = user.display_name or user.username
