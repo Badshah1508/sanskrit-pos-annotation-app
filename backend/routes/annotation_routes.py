@@ -13,6 +13,7 @@ router = APIRouter(prefix="/annotations", tags=["Annotations"])
 def save_draft(
     annotation_id: str,
     payload: SentenceDraftRequest,
+    workspace: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -22,26 +23,29 @@ def save_draft(
         token_inputs=payload.tokens,
         note=payload.note,
         user=current_user,
-        db=db
+        db=db,
+        workspace=workspace
     )
 
 @router.post("/{annotation_id}/verify", response_model=SentenceDetailResponse)
 def verify_sentence(
     annotation_id: str,
     payload: SentenceVerifyRequest,
+    workspace: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Validates completeness of tags, saves all tokens in an atomic transaction,
-    and updates sentence status to verified.
+    and updates sentence status to verified in the database.
     """
     return verify_sentence_annotation(
         annotation_id=annotation_id,
         token_inputs=payload.tokens,
         note=payload.note,
         user=current_user,
-        db=db
+        db=db,
+        workspace=workspace
     )
 
 @router.get("/pending", response_model=List[SentenceDetailResponse])

@@ -7,6 +7,17 @@ import { authApi } from './api';
 import './styles/global.css';
 import './styles/annotation.css';
 
+const WORKSPACE_MAP = {
+  user1: { label: 'User 1', range: '1–1,000', start: 1, end: 1000 },
+  user2: { label: 'User 2', range: '1,001–2,000', start: 1001, end: 2000 },
+  user3: { label: 'User 3', range: '2,001–3,000', start: 2001, end: 3000 },
+  user4: { label: 'User 4', range: '3,001–4,000', start: 3001, end: 4000 },
+  user5: { label: 'User 5', range: '4,001–5,000', start: 4001, end: 5000 },
+  user6: { label: 'User 6', range: '5,001–6,000', start: 5001, end: 6000 },
+  user7: { label: 'User 7', range: '6,001–7,000', start: 6001, end: 7000 },
+  all:   { label: 'All Users', range: '1–7,000', start: 1, end: 7000 }
+};
+
 // Helper to determine initial workspace key from user account
 const resolveInitialWorkspace = (userData) => {
   if (!userData) return 'user1';
@@ -39,7 +50,8 @@ export default function App() {
         const currentUser = await authApi.getCurrentUser();
         if (currentUser) {
           setUser(currentUser);
-          setSelectedWorkspace(resolveInitialWorkspace(currentUser));
+          const initWs = resolveInitialWorkspace(currentUser);
+          setSelectedWorkspace(initWs);
         }
       } catch (err) {
         console.error('Session check failed', err);
@@ -53,7 +65,8 @@ export default function App() {
 
   const handleLoginSuccess = (userData) => {
     setUser(userData);
-    setSelectedWorkspace(resolveInitialWorkspace(userData));
+    const initWs = resolveInitialWorkspace(userData);
+    setSelectedWorkspace(initWs);
     setCurrentView('dashboard');
   };
 
@@ -70,6 +83,13 @@ export default function App() {
       localStorage.setItem('last_admin_workspace', ws);
     }
   };
+
+  // Compute active user label and range for the selected workspace
+  const activeWsInfo = WORKSPACE_MAP[selectedWorkspace] || WORKSPACE_MAP.user1;
+  const activeUserLabel = user?.role === 'admin' && selectedWorkspace === 'all'
+    ? 'All Users (Admin)'
+    : activeWsInfo.label;
+  const activeRangeLabel = activeWsInfo.range;
 
   if (loadingUser) {
     return (
@@ -173,9 +193,9 @@ export default function App() {
           )}
 
           <div className="user-badge">
-            <span>👤 <strong>{user.display_name || user.username}</strong></span>
+            <span>👤 <strong>{activeUserLabel}</strong></span>
             <span style={{ fontSize: '0.75rem', background: '#e2e8f0', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
-              {user.role}
+              {activeRangeLabel}
             </span>
           </div>
 
@@ -195,6 +215,8 @@ export default function App() {
           <Dashboard
             user={user}
             workspace={selectedWorkspace}
+            activeUserLabel={activeUserLabel}
+            activeRangeLabel={activeRangeLabel}
             onSelectWorkspace={setSelectedWorkspace}
             onStartAnnotation={() => setCurrentView('annotate')}
             onNavigateExport={() => setCurrentView('export')}
@@ -205,6 +227,8 @@ export default function App() {
           <AnnotationPage
             user={user}
             workspace={selectedWorkspace}
+            activeUserLabel={activeUserLabel}
+            activeRangeLabel={activeRangeLabel}
             onSelectWorkspace={setSelectedWorkspace}
             onBackToDashboard={() => setCurrentView('dashboard')}
           />

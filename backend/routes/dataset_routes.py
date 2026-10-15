@@ -25,57 +25,43 @@ WORKSPACE_DEFS = [
 
 def resolve_workspace_user(workspace: Optional[str], current_user: User, db: Session) -> Optional[User]:
     """
-    Resolves the target expert user based on the requested workspace and enforces authorization:
-    - If current_user is an expert: They are STRICTLY RESTRICTED to their own assigned workspace.
-      Attempting to specify another expert's workspace raises 403 Forbidden.
-    - If current_user is an admin: They can view any workspace (User 1 - User 7) or view global data.
+    Resolves the target expert user based on the requested workspace (user1..user7)
+    so that experts can verify sentences simultaneously or switch workspaces smoothly.
     """
-    if current_user.role != "admin":
-        # Expert user: enforce self-assignment
-        if workspace:
-            clean_ws = workspace.strip().lower().replace(" ", "").replace("_", "")
-            user_clean = current_user.username.lower().replace(" ", "").replace("_", "")
-            disp_clean = (current_user.display_name or "").lower().replace(" ", "").replace("_", "")
-            
-            # Check if requested workspace matches this authenticated expert
-            matches = (
-                clean_ws == user_clean
-                or (disp_clean != "" and clean_ws == disp_clean)
-                or (clean_ws == f"user{current_user.id}")
-                or (clean_ws == "user1" and user_clean in ["sanskrit_scholar", "scholar"])
-            )
-            if not matches:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Access denied: You are logged in as {current_user.display_name or current_user.username}. "
-                           f"You cannot access sentences belonging to {workspace}. "
-                           f"Please log in with the appropriate expert account."
-                )
-        return current_user
+    if workspace:
+        clean_ws = workspace.strip().lower().replace(" ", "").replace("_", "")
+        if clean_ws == "all":
+            return None
 
-    # Admin user: can inspect any workspace
-    if not workspace:
-        return None
+        # Match against fixed workspace definitions (user1 to user7)
+        for w_def in WORKSPACE_DEFS:
+            if clean_ws in [w_def["key"], f"user{w_def['num']}", str(w_def["num"])]:
+                target_user = db.query(User).filter(
+                    (User.username == w_def["username"]) | (User.username == f"user{w_def['num']}")
+                ).first()
+                if not target_user and w_def["num"] == 1:
+                    target_user = db.query(User).filter(User.username == "sanskrit_scholar").first()
+                if target_user:
+                    return target_user
+                break
 
-    clean_ws = workspace.strip().lower().replace(" ", "").replace("_", "")
-    target_user = None
-
-    for w_def in WORKSPACE_DEFS:
-        if clean_ws in [w_def["key"], f"user{w_def['num']}", str(w_def["num"])]:
-            target_user = db.query(User).filter(
-                (User.username == w_def["username"]) | (User.username == f"user{w_def['num']}")
-            ).first()
-            if not target_user and w_def["num"] == 1:
-                target_user = db.query(User).filter(User.username == "sanskrit_scholar").first()
-            break
-
-    if not target_user:
-        # Try direct username lookup
+        # Fallback direct username or display_name lookup
         target_user = db.query(User).filter(
             (func.lower(User.username) == clean_ws) | (func.lower(User.display_name) == clean_ws)
         ).first()
+        if target_user:
+            return target_user
 
-    return target_user
+    # If no workspace specified, default to authenticated user
+    if current_user:
+        if current_user.username == "sanskrit_scholar":
+            u1 = db.query(User).filter(User.username == "user1").first()
+            if u1:
+                return u1
+        if current_user.role != "admin":
+            return current_user
+
+    return None
 
 
 @router.get("/workspaces", response_model=List[WorkspaceInfo])
@@ -237,13 +223,6 @@ def get_sentence_by_id(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Sentence '{annotation_id}' not found."
-        )
-
-    # Security check: Expert can only access sentences in their assigned range
-    if current_user.role != "admin" and sentence.assigned_expert_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied: This sentence is assigned to another expert's workspace."
         )
 
     return sentence

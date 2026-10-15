@@ -161,8 +161,26 @@ export const datasetApi = {
   getNextSentence: async (workspace) => {
     if (useMock) {
       await new Promise((r) => setTimeout(r, 100));
-      const pending = MOCK_DATA.sentences.find(s => s.status !== 'verified') || MOCK_DATA.sentences[0];
-      return JSON.parse(JSON.stringify(pending));
+      const wsNum = workspace ? parseInt(workspace.replace('user', '')) || 1 : 1;
+      const basePos = (wsNum - 1) * 1000 + 1;
+      return {
+        id: basePos,
+        doc_id: `news_art_${String(wsNum).padStart(3, '0')}`,
+        sentence_id: basePos,
+        annotation_id: `news_art_${String(wsNum).padStart(3, '0')}_${basePos}`,
+        sentence_position: basePos,
+        sentence_text: `संस्कृतवार्तापत्रे अयं वाक्यविशेषः (वाक्यसंख्या ${basePos}) अधुना परीक्षार्थं दर्शितः ।`,
+        status: 'pending',
+        annotation_note: '',
+        tokens: [
+          { id: basePos * 10 + 1, token_id: 1, token: 'संस्कृतवार्तापत्रे', lemma: 'संस्कृतवार्तापत्र', upos: 'NOUN', stanza_upos: 'NOUN', xpos: '_', feats: 'Case=Loc|Number=Sing', gold_sanskrit_tag: '' },
+          { id: basePos * 10 + 2, token_id: 2, token: 'अयं', lemma: 'इदम्', upos: 'PRON', stanza_upos: 'PRON', xpos: '_', feats: 'Case=Nom|Gender=Masc|Number=Sing', gold_sanskrit_tag: '' },
+          { id: basePos * 10 + 3, token_id: 3, token: 'वाक्यविशेषः', lemma: 'वाक्यविशेष', upos: 'NOUN', stanza_upos: 'NOUN', xpos: '_', feats: 'Case=Nom|Gender=Masc|Number=Sing', gold_sanskrit_tag: '' },
+          { id: basePos * 10 + 4, token_id: 4, token: 'परीक्षार्थं', lemma: 'परीक्षार्थ', upos: 'ADV', stanza_upos: 'ADV', xpos: '_', feats: '_', gold_sanskrit_tag: '' },
+          { id: basePos * 10 + 5, token_id: 5, token: 'दर्शितः', lemma: 'दृश्', upos: 'VERB', stanza_upos: 'VERB', xpos: '_', feats: 'Aspect=Perf|VerbForm=Part', gold_sanskrit_tag: '' },
+          { id: basePos * 10 + 6, token_id: 6, token: '।', lemma: '।', upos: 'PUNCT', stanza_upos: 'PUNCT', xpos: '_', feats: '_', gold_sanskrit_tag: 'AVN' }
+        ]
+      };
     }
     const response = await apiClient.get('/dataset/sentences/next', {
       params: workspace ? { workspace } : {}
@@ -183,7 +201,7 @@ export const datasetApi = {
 };
 
 export const annotationApi = {
-  saveDraft: async (annotationId, { tokens, note }) => {
+  saveDraft: async (annotationId, { tokens, note }, workspace) => {
     if (useMock) {
       await new Promise((r) => setTimeout(r, 300));
       const target = MOCK_DATA.sentences.find(s => s.annotation_id === annotationId);
@@ -194,11 +212,13 @@ export const annotationApi = {
       }
       return { success: true, message: 'Draft saved successfully' };
     }
-    const response = await apiClient.put(`/annotations/${annotationId}/draft`, { tokens, note });
+    const response = await apiClient.put(`/annotations/${annotationId}/draft`, { tokens, note }, {
+      params: workspace ? { workspace } : {}
+    });
     return response.data;
   },
 
-  verifySentence: async (annotationId, { tokens, note }) => {
+  verifySentence: async (annotationId, { tokens, note }, workspace) => {
     if (useMock) {
       await new Promise((r) => setTimeout(r, 400));
       const target = MOCK_DATA.sentences.find(s => s.annotation_id === annotationId);
@@ -214,7 +234,9 @@ export const annotationApi = {
       }
       return { success: true, message: 'Sentence marked as verified and saved' };
     }
-    const response = await apiClient.post(`/annotations/${annotationId}/verify`, { tokens, note });
+    const response = await apiClient.post(`/annotations/${annotationId}/verify`, { tokens, note }, {
+      params: workspace ? { workspace } : {}
+    });
     return response.data;
   }
 };

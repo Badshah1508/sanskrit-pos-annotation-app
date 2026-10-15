@@ -5,7 +5,14 @@ import TokenCard from './TokenCard';
 import ConfirmDialog from './ConfirmDialog';
 import { validateSentenceForVerification } from '../utils/validation';
 
-export default function AnnotationPage({ user, workspace, onSelectWorkspace, onBackToDashboard }) {
+export default function AnnotationPage({
+  user,
+  workspace,
+  activeUserLabel,
+  activeRangeLabel,
+  onSelectWorkspace,
+  onBackToDashboard
+}) {
   const [sentence, setSentence] = useState(null);
   const [tokens, setTokens] = useState([]);
   const [note, setNote] = useState('');
@@ -14,21 +21,11 @@ export default function AnnotationPage({ user, workspace, onSelectWorkspace, onB
   const [feedback, setFeedback] = useState(null); // { type: 'success' | 'error', text: '' }
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
-  const [accessDenied, setAccessDenied] = useState(null);
   const [completedAll, setCompletedAll] = useState(false);
   const [completionMessage, setCompletionMessage] = useState('');
 
-  // Determine user's own workspace key
-  const getUserWorkspaceKey = () => {
-    const uname = (user?.username || '').toLowerCase().replace(/[\s_]/g, '');
-    for (let i = 1; i <= 7; i++) {
-      if (uname === `user${i}`) return `user${i}`;
-    }
-    if (uname === 'sanskritscholar') return 'user1';
-    return 'user1';
-  };
-  const myWorkspaceKey = getUserWorkspaceKey();
-  const myWorkspaceLabel = `User ${myWorkspaceKey.replace('user', '')}`;
+  const displayName = activeUserLabel || user?.display_name || user?.username || 'Current Scholar';
+  const displayRange = activeRangeLabel || '1,000 sentences';
 
   useEffect(() => {
     loadNextSentence(workspace);
@@ -37,7 +34,6 @@ export default function AnnotationPage({ user, workspace, onSelectWorkspace, onB
   const loadNextSentence = async (targetWs = workspace) => {
     setLoading(true);
     setFeedback(null);
-    setAccessDenied(null);
     setCompletedAll(false);
     try {
       const queryWs = (targetWs === 'all') ? null : targetWs;
@@ -45,7 +41,7 @@ export default function AnnotationPage({ user, workspace, onSelectWorkspace, onB
       if (!data) {
         setSentence(null);
         setCompletedAll(true);
-        setCompletionMessage('All pending sentences in this workspace have been verified.');
+        setCompletionMessage(`All 1,000 pending sentences assigned to ${displayName} (${displayRange}) have been verified!`);
         return;
       }
       setSentence(data);
@@ -53,13 +49,10 @@ export default function AnnotationPage({ user, workspace, onSelectWorkspace, onB
       setNote(data.annotation_note || '');
       setHasUnsavedChanges(false);
     } catch (err) {
-      if (err.response?.status === 403) {
-        setAccessDenied(err.response?.data?.detail || 'Access denied: You do not have permission to view or annotate this workspace.');
-        setSentence(null);
-      } else if (err.response?.status === 404) {
+      if (err.response?.status === 404) {
         setSentence(null);
         setCompletedAll(true);
-        setCompletionMessage(err.response?.data?.detail || 'All 1,000 sentences assigned to this workspace have been verified!');
+        setCompletionMessage(err.response?.data?.detail || `All 1,000 sentences assigned to ${displayName} (${displayRange}) have been verified!`);
       } else {
         setFeedback({
           type: 'error',
@@ -94,12 +87,18 @@ export default function AnnotationPage({ user, workspace, onSelectWorkspace, onB
       await annotationApi.saveDraft(sentence.annotation_id, {
         tokens,
         note
-      });
+      }, workspace);
       setHasUnsavedChanges(false);
       setSentence(prev => ({ ...prev, status: 'in_progress', annotation_note: note }));
-      setFeedback({ type: 'success', text: 'Draft saved successfully. Sentence marked as In Progress.' });
+      setFeedback({
+        type: 'success',
+        text: `Draft saved to database for sentence #${sentence.sentence_position || sentence.sentence_id}. Status: In Progress.`
+      });
     } catch (err) {
-      setFeedback({ type: 'error', text: 'Failed to save draft: ' + (err.response?.data?.detail || err.message) });
+      setFeedback({
+        type: 'error',
+        text: 'Failed to save draft to database: ' + (err.response?.data?.detail || err.message)
+      });
     } finally {
       setSaving(false);
     }
@@ -124,14 +123,20 @@ export default function AnnotationPage({ user, workspace, onSelectWorkspace, onB
       await annotationApi.verifySentence(sentence.annotation_id, {
         tokens,
         note
-      });
+      }, workspace);
       setHasUnsavedChanges(false);
-      setFeedback({ type: 'success', text: `Sentence ${sentence.annotation_id} verified and saved!` });
+      setFeedback({
+        type: 'success',
+        text: `✓ Sentence #${sentence.sentence_position || sentence.sentence_id} (${sentence.annotation_id}) verified and saved to database!`
+      });
 
-      // Immediate transition to next sentence for fast and smooth navigation
+      // Immediate transition to the next pending sentence in this user's range
       await loadNextSentence(workspace);
     } catch (err) {
-      setFeedback({ type: 'error', text: 'Failed to verify sentence: ' + (err.response?.data?.detail || err.message) });
+      setFeedback({
+        type: 'error',
+        text: 'Failed to verify sentence: ' + (err.response?.data?.detail || err.message)
+      });
     } finally {
       setSaving(false);
     }
@@ -151,46 +156,9 @@ export default function AnnotationPage({ user, workspace, onSelectWorkspace, onB
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '4rem' }}>
-        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Loading Sanskrit sentence...</p>
-      </div>
-    );
-  }
-
-  // Access Denied (expert selected another expert's workspace)
-  if (accessDenied) {
-    return (
-      <div style={{
-        background: '#fef2f2',
-        border: '1.5px solid #f87171',
-        borderRadius: 'var(--radius-md)',
-        padding: '2.5rem 2rem',
-        margin: '2rem auto',
-        maxWidth: '700px',
-        textAlign: 'center'
-      }}>
-        <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🔒</div>
-        <h3 style={{ color: '#991b1b', fontSize: '1.4rem', fontWeight: 700, marginBottom: '0.75rem' }}>
-          Workspace Access Restricted
-        </h3>
-        <p style={{ color: '#7f1d1d', fontSize: '0.95rem', lineHeight: 1.6, marginBottom: '1.5rem' }}>
-          {accessDenied}
+        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>
+          Loading Sanskrit sentence for {displayName} ({displayRange})...
         </p>
-        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button
-            className="btn btn-primary"
-            onClick={() => onSelectWorkspace(myWorkspaceKey)}
-            style={{ padding: '0.65rem 1.4rem' }}
-          >
-            ← Switch to My Workspace ({myWorkspaceLabel})
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={onBackToDashboard}
-            style={{ padding: '0.65rem 1.4rem' }}
-          >
-            Return to Dashboard
-          </button>
-        </div>
       </div>
     );
   }
@@ -204,7 +172,7 @@ export default function AnnotationPage({ user, workspace, onSelectWorkspace, onB
           Congratulations!
         </h3>
         <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '1.05rem', lineHeight: 1.6 }}>
-          {completionMessage || 'All 1,000 sentences assigned to this workspace have been verified.'}
+          {completionMessage || `All 1,000 sentences assigned to ${displayName} have been verified.`}
         </p>
         <button className="btn btn-primary" onClick={onBackToDashboard} style={{ padding: '0.65rem 1.5rem' }}>
           Return to Dashboard
@@ -221,6 +189,9 @@ export default function AnnotationPage({ user, workspace, onSelectWorkspace, onB
           ← Back to Dashboard
         </button>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--primary-color)', background: '#eff6ff', padding: '0.2rem 0.6rem', borderRadius: '4px', border: '1px solid #bfdbfe' }}>
+            {displayName} • Range: {displayRange}
+          </span>
           {hasUnsavedChanges && (
             <span style={{ fontSize: '0.85rem', color: '#b45309', background: '#fef3c7', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 500 }}>
               ● Unsaved changes
@@ -244,9 +215,10 @@ export default function AnnotationPage({ user, workspace, onSelectWorkspace, onB
         {/* Panel Header */}
         <div className="panel-header">
           <div className="meta-info">
+            <span className="meta-item">Workspace: <strong>{displayName}</strong></span>
+            <span className="meta-item">Global Position: <strong>#{sentence.sentence_position || sentence.id}</strong> / 7,000</span>
             <span className="meta-item">Document: <strong>{sentence.doc_id}</strong></span>
             <span className="meta-item">Sentence #{sentence.sentence_id}</span>
-            <span className="meta-item">Global Position: <strong>#{sentence.sentence_position || sentence.id}</strong> / 7,000</span>
             <span className="meta-item">Annotation ID: <strong>{sentence.annotation_id}</strong></span>
           </div>
 
@@ -323,7 +295,7 @@ export default function AnnotationPage({ user, workspace, onSelectWorkspace, onB
         {/* Action Bar */}
         <div className="action-bar">
           <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
-            Expert: <strong>{user?.display_name || user?.username || 'Current Scholar'}</strong>
+            Active Expert: <strong>{displayName}</strong> ({displayRange})
           </div>
 
           <div className="action-buttons-group">
@@ -340,7 +312,7 @@ export default function AnnotationPage({ user, workspace, onSelectWorkspace, onB
               onClick={handleSaveAndNext}
               disabled={saving}
             >
-              {saving ? 'Verifying...' : '✓ Save & Next'}
+              {saving ? 'Verifying & Saving...' : '✓ Save & Next'}
             </button>
           </div>
         </div>

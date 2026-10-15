@@ -12,24 +12,18 @@ const EXPERT_WORKSPACES = [
   { key: 'user7', label: 'User 7', range: '6,001–7,000', count: 1000 }
 ];
 
-export default function Dashboard({ user, workspace, onSelectWorkspace, onStartAnnotation, onNavigateExport }) {
+export default function Dashboard({
+  user,
+  workspace,
+  activeUserLabel,
+  activeRangeLabel,
+  onSelectWorkspace,
+  onStartAnnotation,
+  onNavigateExport
+}) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isAccessDenied, setIsAccessDenied] = useState(false);
-  const [forbiddenMessage, setForbiddenMessage] = useState('');
-
-  // Determine user's own workspace key
-  const getUserWorkspaceKey = () => {
-    const uname = (user?.username || '').toLowerCase().replace(/[\s_]/g, '');
-    for (let i = 1; i <= 7; i++) {
-      if (uname === `user${i}`) return `user${i}`;
-    }
-    if (uname === 'sanskritscholar') return 'user1';
-    return 'user1';
-  };
-  const myWorkspaceKey = getUserWorkspaceKey();
-  const myWorkspaceLabel = `User ${myWorkspaceKey.replace('user', '')}`;
 
   useEffect(() => {
     loadStats();
@@ -38,56 +32,24 @@ export default function Dashboard({ user, workspace, onSelectWorkspace, onStartA
   const loadStats = async () => {
     setLoading(true);
     setError('');
-    setIsAccessDenied(false);
-    setForbiddenMessage('');
     try {
       const queryWs = (workspace === 'all') ? null : workspace;
       const data = await datasetApi.getStats(queryWs);
       setStats(data);
     } catch (err) {
-      if (err.response?.status === 403) {
-        setIsAccessDenied(true);
-        setForbiddenMessage(err.response?.data?.detail || 'Access denied: You do not have permission to view this workspace.');
-      } else {
-        setError('Could not load statistics. Please try again.');
-      }
+      setError('Could not load statistics. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  const displayName = activeUserLabel || user?.display_name || user?.username || 'Expert';
+  const displayRange = activeRangeLabel || stats?.assigned_range || '1,000 sentences';
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '3rem' }}>
-        <p style={{ color: 'var(--text-muted)' }}>Loading dataset statistics...</p>
-      </div>
-    );
-  }
-
-  if (isAccessDenied) {
-    return (
-      <div style={{
-        background: '#fef2f2',
-        border: '1.5px solid #f87171',
-        borderRadius: 'var(--radius-md)',
-        padding: '2rem',
-        margin: '2rem 0'
-      }}>
-        <h3 style={{ color: '#991b1b', fontSize: '1.3rem', marginBottom: '0.75rem', fontWeight: 700 }}>
-          🔒 Workspace Access Restricted
-        </h3>
-        <p style={{ color: '#7f1d1d', fontSize: '0.95rem', marginBottom: '1.25rem', lineHeight: 1.6 }}>
-          {forbiddenMessage}
-        </p>
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <button
-            className="btn btn-primary"
-            onClick={() => onSelectWorkspace(myWorkspaceKey)}
-            style={{ padding: '0.6rem 1.25rem' }}
-          >
-            ← Return to My Assigned Workspace ({myWorkspaceLabel})
-          </button>
-        </div>
+        <p style={{ color: 'var(--text-muted)' }}>Loading {displayName} dataset statistics...</p>
       </div>
     );
   }
@@ -112,10 +74,10 @@ export default function Dashboard({ user, workspace, onSelectWorkspace, onStartA
       }}>
         <div>
           <h2 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--primary-color)' }}>
-            Welcome, {user?.display_name || user?.username || 'Expert'}!
+            Welcome, {displayName}!
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginTop: '0.2rem' }}>
-            Current Workspace: <strong style={{ color: '#1e293b' }}>{stats?.workspace_label || 'User Workspace'}</strong> • Assigned Sentences: <strong style={{ color: '#1e293b' }}>{stats?.assigned_range || '1,000 sentences'}</strong>
+            Current Workspace: <strong style={{ color: '#1e293b' }}>{displayName}</strong> • Assigned Sentences: <strong style={{ color: '#1e293b' }}>{displayRange}</strong>
           </p>
         </div>
 
@@ -149,15 +111,15 @@ export default function Dashboard({ user, workspace, onSelectWorkspace, onStartA
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>
-            {stats?.workspace_label || 'Workspace'} Verification Progress
+            {displayName} Verification Progress
           </h3>
           <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 500 }}>
-            Range: <strong>{stats?.assigned_range || '1–1,000'}</strong>
+            Assigned Range: <strong>{displayRange}</strong>
           </span>
         </div>
         <ProgressBar
           completed={stats?.verified_sentences || 0}
-          total={stats?.total_sentences || 0}
+          total={stats?.total_sentences || 1000}
           percentage={stats?.completion_percentage || 0}
         />
       </div>
@@ -180,7 +142,7 @@ export default function Dashboard({ user, workspace, onSelectWorkspace, onStartA
             Total Assigned
           </div>
           <div style={{ fontSize: '2rem', fontWeight: 700, color: '#1e293b', marginTop: '0.25rem' }}>
-            {stats?.total_sentences || 0}
+            {stats?.total_sentences || 1000}
           </div>
           <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.25rem' }}>
             {stats?.total_tokens || 0} tokens in range
@@ -242,58 +204,56 @@ export default function Dashboard({ user, workspace, onSelectWorkspace, onStartA
         </div>
       </div>
 
-      {/* Administrator Expert Workspace Summary (Visible to Admin) */}
-      {user?.role === 'admin' && (
-        <div style={{
-          background: 'white',
-          border: '1px solid var(--border-color)',
-          borderRadius: 'var(--radius-md)',
-          padding: '1.25rem',
-          marginBottom: '2rem',
-          boxShadow: 'var(--shadow-sm)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b' }}>
-              👥 7 Expert Allocation Overview (7,000 Sentences)
-            </h4>
-            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-              Administrator Inspection Mode
-            </span>
-          </div>
-
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
-            gap: '0.75rem'
-          }}>
-            {EXPERT_WORKSPACES.map((w) => (
-              <div
-                key={w.key}
-                onClick={() => onSelectWorkspace(w.key)}
-                style={{
-                  padding: '0.75rem',
-                  borderRadius: '6px',
-                  border: workspace === w.key ? '2px solid var(--primary-color)' : '1px solid #e2e8f0',
-                  background: workspace === w.key ? '#eff6ff' : '#f8fafc',
-                  cursor: 'pointer',
-                  textAlign: 'center',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e3a8a' }}>
-                  {w.label}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
-                  {w.range}
-                </div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#047857', marginTop: '0.25rem' }}>
-                  1,000 sentences
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* 7 Expert Workspace Switcher Overview */}
+      <div style={{
+        background: 'white',
+        border: '1px solid var(--border-color)',
+        borderRadius: 'var(--radius-md)',
+        padding: '1.25rem',
+        marginBottom: '2rem',
+        boxShadow: 'var(--shadow-sm)'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b' }}>
+            👥 7 Expert Workspaces (Click to Switch Range)
+          </h4>
+          <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+            1,000 sentences each • Simultaneous expert verification
+          </span>
         </div>
-      )}
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+          gap: '0.75rem'
+        }}>
+          {EXPERT_WORKSPACES.map((w) => (
+            <div
+              key={w.key}
+              onClick={() => onSelectWorkspace(w.key)}
+              style={{
+                padding: '0.75rem',
+                borderRadius: '6px',
+                border: workspace === w.key ? '2px solid var(--primary-color)' : '1px solid #e2e8f0',
+                background: workspace === w.key ? '#eff6ff' : '#f8fafc',
+                cursor: 'pointer',
+                textAlign: 'center',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e3a8a' }}>
+                {w.label}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
+                {w.range}
+              </div>
+              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#047857', marginTop: '0.25rem' }}>
+                1,000 sentences
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Instructions Card for Experts */}
       <div style={{
@@ -310,7 +270,7 @@ export default function Dashboard({ user, workspace, onSelectWorkspace, onStartA
           <li>Examine the Sanskrit sentence and each individual token in Devanagari script.</li>
           <li>Assign the appropriate <strong>Sanskrit Consortium POS tag</strong> (e.g., <code>N, KP, A, AVN</code>) from the dropdown.</li>
           <li>Click <strong>Save Draft</strong> if you want to pause your work without marking the sentence verified.</li>
-          <li>Click <strong>Save & Next</strong> to finalize all tags, validate completeness, and move directly to your next pending sentence.</li>
+          <li>Click <strong>Save & Next</strong> to finalize all tags, validate completeness, save changes into the database, and move directly to your next pending sentence.</li>
         </ul>
       </div>
     </div>

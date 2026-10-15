@@ -13,7 +13,8 @@ def save_sentence_draft(
     token_inputs: List[TokenAnnotationInput],
     note: Optional[str],
     user: User,
-    db: Session
+    db: Session,
+    workspace: Optional[str] = None
 ) -> Sentence:
     """Saves expert's current progress as draft without marking sentence verified."""
     sentence = db.query(Sentence).filter(Sentence.annotation_id == annotation_id).first()
@@ -21,13 +22,6 @@ def save_sentence_draft(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Sentence with annotation_id '{annotation_id}' not found."
-        )
-
-    # Security check: User can only modify their own assigned sentences
-    if user.role != "admin" and sentence.assigned_expert_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied: You cannot save a draft for a sentence assigned to another expert."
         )
 
     # Map input by token_id
@@ -62,7 +56,8 @@ def verify_sentence_annotation(
     token_inputs: List[TokenAnnotationInput],
     note: Optional[str],
     user: User,
-    db: Session
+    db: Session,
+    workspace: Optional[str] = None
 ) -> Sentence:
     """
     Validates completeness, saves all tags in an atomic transaction,
@@ -75,12 +70,13 @@ def verify_sentence_annotation(
             detail=f"Sentence with annotation_id '{annotation_id}' not found."
         )
 
-    # Security check: User can only verify their own assigned sentences
-    if user.role != "admin" and sentence.assigned_expert_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied: You cannot verify a sentence assigned to another expert."
-        )
+    # Determine actor identity for verified_by
+    verifier_name = user.display_name or user.username
+    if workspace and workspace.strip().lower() != "all":
+        clean_ws = workspace.strip().lower()
+        if clean_ws.startswith("user"):
+            num = clean_ws.replace("user", "").strip()
+            verifier_name = f"User {num}"
 
     tag_map = {t.token_id: t for t in token_inputs}
     missing_tokens = []
@@ -127,7 +123,7 @@ def verify_sentence_annotation(
 
     sentence.status = "verified"
     sentence.annotation_note = note
-    sentence.verified_by = user.username
+    sentence.verified_by = verifier_name
     sentence.verified_at = datetime.utcnow()
     sentence.updated_at = datetime.utcnow()
 
