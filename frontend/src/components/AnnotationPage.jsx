@@ -21,8 +21,9 @@ export default function AnnotationPage({
   const [feedback, setFeedback] = useState(null); // { type: 'success' | 'error', text: '' }
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
-  const [completedAll, setCompletedAll] = useState(false);
+  const [isGenuineCompletion, setIsGenuineCompletion] = useState(false);
   const [completionMessage, setCompletionMessage] = useState('');
+  const [fetchError, setFetchError] = useState(null);
 
   const [nextSentenceError, setNextSentenceError] = useState(null);
 
@@ -30,11 +31,14 @@ export default function AnnotationPage({
   const displayRange = activeRangeLabel || '1,000 sentences';
 
   useEffect(() => {
-    // Immediately clear current sentence so stale data is never shown
+    // Immediately clear current sentence and completion flags so stale data is never shown
     setSentence(null);
     setTokens([]);
     setNote('');
     setNextSentenceError(null);
+    setFetchError(null);
+    setIsGenuineCompletion(false);
+    setCompletionMessage('');
     loadNextSentence(workspace);
   }, [workspace]);
 
@@ -44,21 +48,42 @@ export default function AnnotationPage({
       setFeedback(null);
     }
     setNextSentenceError(null);
-    setCompletedAll(false);
+    setFetchError(null);
+    setIsGenuineCompletion(false);
     try {
       const queryWs = (targetWs === 'all') ? null : targetWs;
       const data = await datasetApi.getNextSentence(queryWs);
       if (!data) {
+        // Double-check with stats before declaring completion
+        const stats = await datasetApi.getStats(queryWs);
+        const expected = (queryWs === 'all') ? 7000 : 1000;
+        if (
+          stats?.total_sentences === expected &&
+          stats?.verified_sentences === expected &&
+          stats?.pending_sentences === 0 &&
+          stats?.in_progress_sentences === 0
+        ) {
+          setSentence(null);
+          setTokens([]);
+          setIsGenuineCompletion(true);
+          setCompletionMessage(`All ${expected.toLocaleString()} sentences assigned to ${displayName} have been genuinely verified!`);
+          return;
+        }
+        // If not genuinely 100% verified, it is a data discrepancy, NOT a completion!
         setSentence(null);
         setTokens([]);
-        setCompletedAll(true);
-        setCompletionMessage(`All 1,000 sentences assigned to ${displayName} (${displayRange}) have been verified!`);
+        setIsGenuineCompletion(false);
+        setFetchError(`Database state discrepancy: No pending sentence returned, but database shows ${stats?.verified_sentences || 0}/${expected} verified and ${stats?.pending_sentences || 0} pending.`);
         return;
       }
+
       setSentence(data);
       setTokens(data.tokens || []);
       setNote(data.annotation_note || '');
       setHasUnsavedChanges(false);
+      setIsGenuineCompletion(false);
+      setFetchError(null);
+
       if (isAfterSave && savedInfo) {
         setFeedback({
           type: 'success',
@@ -66,24 +91,37 @@ export default function AnnotationPage({
         });
       }
     } catch (err) {
-      if (err.response?.status === 404) {
+      const status = err.response?.status;
+      const errorDetail = err.response?.data?.detail || err.message || 'Unknown network error';
+
+      // Check if backend confirmed 100% genuine completion
+      if (status === 404 && typeof errorDetail === 'string' && errorDetail.startsWith('COMPLETED:')) {
+        try {
+          const stats = await datasetApi.getStats((targetWs === 'all') ? null : targetWs);
+          const expected = (targetWs === 'all') ? 7000 : 1000;
+          if (
+            stats?.total_sentences === expected &&
+            stats?.verified_sentences === expected &&
+            stats?.pending_sentences === 0
+          ) {
+            setSentence(null);
+            setTokens([]);
+            setIsGenuineCompletion(true);
+            setCompletionMessage(errorDetail.replace('COMPLETED:', '').trim());
+            return;
+          }
+        } catch (_) {}
+      }
+
+      // Any other case is an error - NEVER display congratulations!
+      setIsGenuineCompletion(false);
+      if (isAfterSave) {
+        // Keep save intact! Inform user that save succeeded, and provide retry button
+        setNextSentenceError(`Saved successfully! Failed to fetch next sentence: ${errorDetail}`);
+      } else {
         setSentence(null);
         setTokens([]);
-        setCompletedAll(true);
-        setCompletionMessage(err.response?.data?.detail || `All 1,000 sentences assigned to ${displayName} (${displayRange}) have been verified!`);
-      } else {
-        const errorDetail = err.response?.data?.detail || err.message || 'Unknown network error';
-        if (isAfterSave) {
-          // Keep save intact! Inform user that save succeeded, and provide retry button
-          setNextSentenceError(`Saved successfully! Failed to fetch next sentence: ${errorDetail}`);
-        } else {
-          setSentence(null);
-          setTokens([]);
-          setFeedback({
-            type: 'error',
-            text: 'Error fetching next sentence: ' + errorDetail
-          });
-        }
+        setFetchError(errorDetail);
       }
     } finally {
       setLoading(false);
@@ -210,10 +248,10 @@ export default function AnnotationPage({
     );
   }
 
-  // All sentences verified in this workspace
-  if (completedAll || !sentence) {
+  // 1. Genuine completion: ONLY if backend confirmed 1,000 / 1,000 verified
+  if (isGenuineCompletion) {
     return (
-      <div style={{ textAlign: 'center', padding: '4rem 2rem', background: 'white', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', maxWidth: '700px', margin: '2rem auto' }}>
+      <div style={{ textAlign: 'center', padding: '4rem 2rem', background: 'white', borderRadius: 'var(--radius-md)', border: '1px solid #bbf7d0', maxWidth: '700px', margin: '2rem auto' }}>
         <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🎉</div>
         <h3 style={{ fontSize: '1.5rem', color: '#15803d', marginBottom: '0.75rem', fontWeight: 700 }}>
           Congratulations!
@@ -224,6 +262,29 @@ export default function AnnotationPage({
         <button className="btn btn-primary" onClick={onBackToDashboard} style={{ padding: '0.65rem 1.5rem' }}>
           Return to Dashboard
         </button>
+      </div>
+    );
+  }
+
+  // 2. Fetch error state: show clear error message with Retry button (NEVER false congratulations)
+  if (fetchError || !sentence) {
+    return (
+      <div style={{ textAlign: 'center', padding: '3.5rem 2rem', background: 'white', borderRadius: 'var(--radius-md)', border: '1px solid #fecaca', maxWidth: '700px', margin: '2rem auto', boxShadow: 'var(--shadow-sm)' }}>
+        <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>⚠️</div>
+        <h3 style={{ fontSize: '1.35rem', color: '#b91c1c', marginBottom: '0.75rem', fontWeight: 700 }}>
+          Unable to Load Annotation Sentence
+        </h3>
+        <p style={{ color: '#475569', marginBottom: '1.75rem', fontSize: '0.95rem', lineHeight: 1.6, background: '#fef2f2', padding: '0.85rem 1.25rem', borderRadius: 'var(--radius-sm)', border: '1px solid #fee2e2', textAlign: 'left' }}>
+          {fetchError || `No sentence record could be loaded for ${displayName} (${displayRange}).`}
+        </p>
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button className="btn btn-primary" onClick={() => loadNextSentence(workspace)} style={{ padding: '0.65rem 1.5rem' }}>
+            ↻ Retry Loading Sentence
+          </button>
+          <button className="btn btn-secondary" onClick={onBackToDashboard} style={{ padding: '0.65rem 1.5rem' }}>
+            ← Return to Dashboard
+          </button>
+        </div>
       </div>
     );
   }

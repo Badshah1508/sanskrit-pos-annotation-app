@@ -131,9 +131,120 @@ class TestSimultaneousExpertAssignmentsAndPersistence(unittest.TestCase):
         self.assertEqual(res_stats.status_code, 200)
         stats = res_stats.json()
         self.assertEqual(stats["total_sentences"], 1000)
+        self.assertEqual(stats["assigned_sentences"], 1000)
         self.assertGreaterEqual(stats["verified_sentences"], 1)
-        self.assertEqual(stats["pending_sentences"], 1000 - stats["verified_sentences"] - stats["in_progress_sentences"])
-        print(f"[PASS] User 2 Stats: {stats['verified_sentences']} verified, {stats['pending_sentences']} pending out of 1,000 sentences.")
+        self.assertEqual(stats["is_completed"], False)
+        print(f"[PASS] User 2 Stats: {stats['verified_sentences']} verified, {stats['pending_sentences']} pending out of 1,000 sentences. is_completed=False")
+
+    def test_05_test_a_user2_pending_never_shows_completion(self):
+        """Test A: User 2 has pending sentences -> loads eligible sentence, NOT congratulations."""
+        res = self.client.post("/api/auth/login", json={"username": "user2", "password": "password123"})
+        token = res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        res_next = self.client.get("/api/dataset/sentences/next?workspace=user2", headers=headers)
+        self.assertEqual(res_next.status_code, 200)
+        data = res_next.json()
+        self.assertIn("sentence_position", data)
+        self.assertGreaterEqual(data["sentence_position"], 1001)
+        self.assertLessEqual(data["sentence_position"], 2000)
+        print(f"[PASS Test A] User 2 pending sentences exist: returned sentence #{data['sentence_position']}, NOT completion")
+
+    def test_06_test_b_user2_in_progress_resumes_correctly(self):
+        """Test B: When User 2 has in-progress draft, Resume Annotation returns the draft, NOT completion."""
+        res = self.client.post("/api/auth/login", json={"username": "user2", "password": "password123"})
+        token = res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Save sentence 1005 as in_progress
+        s_1005 = self.db.query(Sentence).filter(Sentence.sentence_position == 1005).first()
+        s_1005.status = "in_progress"
+        self.db.commit()
+
+        res_resume = self.client.get("/api/dataset/sentences/next?workspace=user2", headers=headers)
+        self.assertEqual(res_resume.status_code, 200)
+        data = res_resume.json()
+        self.assertEqual(data["sentence_position"], 1005)
+        self.assertEqual(data["status"], "in_progress")
+        print(f"[PASS Test B] User 2 resumed in-progress draft #{data['sentence_position']}, NOT completion")
+
+        # Reset 1005 back to pending
+        s_1005.status = "pending"
+        self.db.commit()
+
+    def test_07_test_c_genuine_completion_only_when_1000_verified(self):
+        """Test C: Completion 404 is ONLY returned when all 1,000 sentences are genuinely verified."""
+        res = self.client.post("/api/auth/login", json={"username": "user2", "password": "password123"})
+        token = res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Temporarily mark all 1,000 sentences in range 1001-2000 as verified
+        self.db.query(Sentence).filter(
+            Sentence.sentence_position >= 1001,
+            Sentence.sentence_position <= 2000
+        ).update({"status": "verified"}, synchronize_session=False)
+        self.db.commit()
+
+        # Check stats shows is_completed = True
+        res_stats = self.client.get("/api/dataset/stats?workspace=user2", headers=headers)
+        self.assertEqual(res_stats.status_code, 200)
+        self.assertEqual(res_stats.json()["is_completed"], True)
+        self.assertEqual(res_stats.json()["verified_sentences"], 1000)
+
+        # Check next endpoint returns 404 with COMPLETED message
+        res_next = self.client.get("/api/dataset/sentences/next?workspace=user2", headers=headers)
+        self.assertEqual(res_next.status_code, 404)
+        self.assertIn("COMPLETED", res_next.json()["detail"])
+        print("[PASS Test C] When all 1,000 sentences are verified: genuine completion confirmed")
+
+        # Revert back to pending
+        self.db.query(Sentence).filter(
+            Sentence.sentence_position >= 1001,
+            Sentence.sentence_position <= 2000
+        ).update({"status": "pending"}, synchronize_session=False)
+        self.db.commit()
+
+    def test_08_test_d_discrepancy_returns_409_never_completion(self):
+        """Test D: If sentences are missing or not all verified, return 409 Conflict, NEVER false completion."""
+        res = self.client.post("/api/auth/login", json={"username": "user2", "password": "password123"})
+        token = res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Simulate invalid status on remaining pending sentences so neither in_progress nor pending match
+        self.db.query(Sentence).filter(
+            Sentence.sentence_position >= 1001,
+            Sentence.sentence_position <= 2000
+        ).update({"status": "corrupted_status"}, synchronize_session=False)
+        self.db.commit()
+
+        # Check next endpoint returns 409 CONFLICT, NOT 404 or completion
+        res_next = self.client.get("/api/dataset/sentences/next?workspace=user2", headers=headers)
+        self.assertEqual(res_next.status_code, 409)
+        self.assertIn("Assignment discrepancy", res_next.json()["detail"])
+        print(f"[PASS Test D] Database discrepancy returned 409 Conflict ({res_next.json()['detail']}), NOT false completion")
+
+        # Revert back to pending
+        self.db.query(Sentence).filter(
+            Sentence.sentence_position >= 1001,
+            Sentence.sentence_position <= 2000
+        ).update({"status": "pending"}, synchronize_session=False)
+        self.db.commit()
+
+    def test_09_test_f_database_integrity_all_seven_users(self):
+        """Test F: Database integrity: 7 distinct 1,000-sentence slices, no overlaps, no gaps."""
+        total = self.db.query(Sentence).count()
+        self.assertEqual(total, 7000)
+
+        for u_num in range(1, 8):
+            start = (u_num - 1) * 1000 + 1
+            end = u_num * 1000
+            count = self.db.query(Sentence).filter(
+                Sentence.sentence_position >= start,
+                Sentence.sentence_position <= end
+            ).count()
+            self.assertEqual(count, 1000, f"User {u_num} does not have exactly 1,000 sentences")
+        print("[PASS Test F] Database integrity: 7,000 sentences strictly partitioned into 7 x 1,000 slices")
+
 
 if __name__ == "__main__":
     unittest.main()

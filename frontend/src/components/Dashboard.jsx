@@ -31,6 +31,7 @@ export default function Dashboard({
 
   const loadStats = async () => {
     setLoading(true);
+    setStats(null);
     setError('');
     try {
       const queryWs = (workspace === 'all') ? null : workspace;

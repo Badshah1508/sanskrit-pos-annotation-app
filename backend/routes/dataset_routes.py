@@ -99,18 +99,14 @@ def get_stats(
     start_pos, end_pos, label = resolve_sentence_position_range(workspace, current_user)
     base_filter = (Sentence.sentence_position >= start_pos) & (Sentence.sentence_position <= end_pos)
 
-    # Status counts for sentences in this sentence_position range
-    counts = (
-        db.query(Sentence.status, func.count(Sentence.id))
-        .filter(base_filter)
-        .group_by(Sentence.status)
-        .all()
-    )
-    counts_dict = dict(counts)
-    pending = counts_dict.get("pending", 0)
-    in_progress = counts_dict.get("in_progress", 0)
-    verified = counts_dict.get("verified", 0)
-    total_sentences = pending + in_progress + verified
+    # Status counts for sentences in this sentence_position range directly from DB
+    total_sentences = db.query(func.count(Sentence.id)).filter(base_filter).scalar() or 0
+    pending = db.query(func.count(Sentence.id)).filter(base_filter, Sentence.status == "pending").scalar() or 0
+    in_progress = db.query(func.count(Sentence.id)).filter(base_filter, Sentence.status == "in_progress").scalar() or 0
+    verified = db.query(func.count(Sentence.id)).filter(base_filter, Sentence.status == "verified").scalar() or 0
+
+    expected_total = 7000 if (start_pos == 1 and end_pos == 7000) else 1000
+    is_completed = bool(total_sentences == expected_total and verified == expected_total and pending == 0 and in_progress == 0)
 
     # Count distinct unique documents in this sentence range
     total_documents = (
@@ -139,6 +135,7 @@ def get_stats(
     return {
         "total_documents": total_documents,
         "total_sentences": total_sentences,
+        "assigned_sentences": total_sentences,
         "pending_sentences": pending,
         "in_progress_sentences": in_progress,
         "verified_sentences": verified,
@@ -147,7 +144,8 @@ def get_stats(
         "completion_percentage": round(completion_pct, 2),
         "expert_verified": verified,
         "workspace_label": label,
-        "assigned_range": f"Sentences {start_pos:,}–{end_pos:,}"
+        "assigned_range": f"Sentences {start_pos:,}–{end_pos:,}",
+        "is_completed": is_completed
     }
 
 
@@ -163,14 +161,14 @@ def get_next_sentence(
     Ordered stably by Sentence.sentence_position.asc().
     """
     start_pos, end_pos, label = resolve_sentence_position_range(workspace, current_user)
+    base_filter = (Sentence.sentence_position >= start_pos) & (Sentence.sentence_position <= end_pos)
 
     # 1. First check if user has an unfinished draft in their sentence_position range
     draft = (
         db.query(Sentence)
         .options(selectinload(Sentence.tokens))
         .filter(
-            Sentence.sentence_position >= start_pos,
-            Sentence.sentence_position <= end_pos,
+            base_filter,
             Sentence.status == "in_progress"
         )
         .order_by(Sentence.sentence_position.asc())
@@ -184,8 +182,7 @@ def get_next_sentence(
         db.query(Sentence)
         .options(selectinload(Sentence.tokens))
         .filter(
-            Sentence.sentence_position >= start_pos,
-            Sentence.sentence_position <= end_pos,
+            base_filter,
             Sentence.status == "pending"
         )
         .order_by(Sentence.sentence_position.asc())
@@ -194,21 +191,35 @@ def get_next_sentence(
     if pending:
         return pending
 
-    # 3. Check if any sentences exist in this range
-    total_in_range = db.query(func.count(Sentence.id)).filter(
-        Sentence.sentence_position >= start_pos,
-        Sentence.sentence_position <= end_pos
-    ).scalar() or 0
+    # 3. If no in-progress or pending sentence exists, verify database status counts strictly
+    total_in_range = db.query(func.count(Sentence.id)).filter(base_filter).scalar() or 0
+    verified_in_range = db.query(func.count(Sentence.id)).filter(base_filter, Sentence.status == "verified").scalar() or 0
+    pending_in_range = db.query(func.count(Sentence.id)).filter(base_filter, Sentence.status == "pending").scalar() or 0
+    in_progress_in_range = db.query(func.count(Sentence.id)).filter(base_filter, Sentence.status == "in_progress").scalar() or 0
 
-    if total_in_range == 0:
+    expected_total = 7000 if (start_pos == 1 and end_pos == 7000) else 1000
+
+    # Genuine completion check: ALL 1,000 sentences verified, exactly 0 pending, 0 in_progress
+    if (
+        total_in_range == expected_total and
+        verified_in_range == expected_total and
+        pending_in_range == 0 and
+        in_progress_in_range == 0
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No sentences exist in {label} range (Sentences {start_pos:,}–{end_pos:,})."
+            detail=f"COMPLETED: All {expected_total:,} sentences assigned to {label} have been genuinely verified."
         )
 
+    # Discrepancy report: do NOT return 404 or completion
     raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"All sentences assigned to {label} (Sentences {start_pos:,}–{end_pos:,}) have been verified!"
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            f"Assignment discrepancy in {label} ({start_pos:,}–{end_pos:,}): "
+            f"Found {total_in_range:,} total sentences (expected {expected_total:,}), "
+            f"{verified_in_range:,} verified, {pending_in_range:,} pending, {in_progress_in_range:,} in-progress. "
+            f"No eligible pending sentence could be loaded."
+        )
     )
 
 

@@ -98,6 +98,7 @@ class WorkspaceInfo(BaseModel):
 class DatasetStatsResponse(BaseModel):
     total_documents: Optional[int] = None
     total_sentences: int
+    assigned_sentences: Optional[int] = None
     pending_sentences: int
     in_progress_sentences: int
     verified_sentences: int
@@ -107,6 +108,7 @@ class DatasetStatsResponse(BaseModel):
     expert_verified: int
     workspace_label: Optional[str] = None
     assigned_range: Optional[str] = None
+    is_completed: Optional[bool] = False
 
 
 
