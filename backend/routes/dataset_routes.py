@@ -1,4 +1,5 @@
 from typing import List, Optional
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func, cast, Integer
@@ -8,6 +9,8 @@ from schemas import DatasetStatsResponse, SentenceDetailResponse, WorkspaceInfo
 from dependencies import get_current_user, get_current_admin
 from services.csv_importer import import_sanskrit_csv
 from config import settings
+
+logger = logging.getLogger("sanskrit_pos.dataset")
 
 router = APIRouter(prefix="/dataset", tags=["Dataset"])
 
@@ -163,6 +166,12 @@ def get_next_sentence(
     start_pos, end_pos, label = resolve_sentence_position_range(workspace, current_user)
     base_filter = (Sentence.sentence_position >= start_pos) & (Sentence.sentence_position <= end_pos)
 
+    logger.info(
+        f"[ResumeAnnotation] User '{current_user.username}' (id={current_user.id}, role={current_user.role}) "
+        f"requested next sentence with workspace='{workspace}'. "
+        f"Server resolved range: {start_pos:,}–{end_pos:,} ({label})."
+    )
+
     # 1. First check if user has an unfinished draft in their sentence_position range
     draft = (
         db.query(Sentence)
@@ -175,6 +184,10 @@ def get_next_sentence(
         .first()
     )
     if draft:
+        logger.info(
+            f"[ResumeAnnotation] Loaded in-progress draft: sentence_position=#{draft.sentence_position}, "
+            f"annotation_id='{draft.annotation_id}', doc_id='{draft.doc_id}'. Range: {start_pos}–{end_pos}. Filter passed: True."
+        )
         return draft
 
     # 2. Otherwise return the earliest pending sentence in their sentence_position range
@@ -189,6 +202,10 @@ def get_next_sentence(
         .first()
     )
     if pending:
+        logger.info(
+            f"[ResumeAnnotation] Loaded next pending sentence: sentence_position=#{pending.sentence_position}, "
+            f"annotation_id='{pending.annotation_id}', doc_id='{pending.doc_id}'. Range: {start_pos}–{end_pos}. Filter passed: True."
+        )
         return pending
 
     # 3. If no in-progress or pending sentence exists, verify database status counts strictly
@@ -206,11 +223,16 @@ def get_next_sentence(
         pending_in_range == 0 and
         in_progress_in_range == 0
     ):
+        logger.info(f"[ResumeAnnotation] Genuine completion confirmed for {label}: all {expected_total} sentences verified.")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"COMPLETED: All {expected_total:,} sentences assigned to {label} have been genuinely verified."
         )
 
+    logger.warning(
+        f"[ResumeAnnotation] Discrepancy for {label}: total={total_in_range}, verified={verified_in_range}, "
+        f"pending={pending_in_range}, in_progress={in_progress_in_range}."
+    )
     # Discrepancy report: do NOT return 404 or completion
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
