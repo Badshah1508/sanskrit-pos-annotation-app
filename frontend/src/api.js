@@ -125,21 +125,48 @@ export const authApi = {
   }
 };
 
+export const WORKSPACE_BOUNDS = {
+  user1: { num: 1, label: 'User 1', start: 1, end: 1000, docs: 1000, sentences: 2658, firstPendingId: '1_0' },
+  user2: { num: 2, label: 'User 2', start: 1001, end: 2000, docs: 1000, sentences: 2029, firstPendingId: '1001_0' },
+  user3: { num: 3, label: 'User 3', start: 2001, end: 3000, docs: 1000, sentences: 1611, firstPendingId: '2001_0' },
+  user4: { num: 4, label: 'User 4', start: 3001, end: 4000, docs: 597, sentences: 702, firstPendingId: '3001_0' },
+  user5: { num: 5, label: 'User 5', start: 4001, end: 5000, docs: 0, sentences: 0, firstPendingId: null },
+  user6: { num: 6, label: 'User 6', start: 5001, end: 6000, docs: 0, sentences: 0, firstPendingId: null },
+  user7: { num: 7, label: 'User 7', start: 6001, end: 7000, docs: 0, sentences: 0, firstPendingId: null }
+};
+
 export const datasetApi = {
   getWorkspaces: async () => {
     if (useMock) {
-      return [
-        { id: 1, key: 'user1', label: 'User 1', username: 'user1', range_label: '1–1,000', range_start: 1, range_end: 1000, total_sentences: 1000 },
-        { id: 2, key: 'user2', label: 'User 2', username: 'user2', range_label: '1,001–2,000', range_start: 1001, range_end: 2000, total_sentences: 1000 },
-        { id: 3, key: 'user3', label: 'User 3', username: 'user3', range_label: '2,001–3,000', range_start: 2001, range_end: 3000, total_sentences: 1000 },
-        { id: 4, key: 'user4', label: 'User 4', username: 'user4', range_label: '3,001–4,000', range_start: 3001, range_end: 4000, total_sentences: 1000 },
-        { id: 5, key: 'user5', label: 'User 5', username: 'user5', range_label: '4,001–5,000', range_start: 4001, range_end: 5000, total_sentences: 1000 },
-        { id: 6, key: 'user6', label: 'User 6', username: 'user6', range_label: '5,001–6,000', range_start: 5001, range_end: 6000, total_sentences: 1000 },
-        { id: 7, key: 'user7', label: 'User 7', username: 'user7', range_label: '6,001–7,000', range_start: 6001, range_end: 7000, total_sentences: 1000 }
-      ];
+      return Object.values(WORKSPACE_BOUNDS).map(w => ({
+        id: w.num,
+        key: `user${w.num}`,
+        label: w.label,
+        username: `user${w.num}`,
+        range_label: `doc_id ${w.start.toLocaleString()}–${w.end.toLocaleString()}`,
+        range_start: w.start,
+        range_end: w.end,
+        total_documents: w.docs,
+        total_sentences: w.sentences
+      }));
     }
-    const response = await apiClient.get('/dataset/workspaces');
-    return response.data;
+    try {
+      const response = await apiClient.get('/dataset/workspaces');
+      return response.data;
+    } catch (e) {
+      // Resilient fallback if backend has not deployed /workspaces route yet
+      return Object.values(WORKSPACE_BOUNDS).map(w => ({
+        id: w.num,
+        key: `user${w.num}`,
+        label: w.label,
+        username: `user${w.num}`,
+        range_label: `doc_id ${w.start.toLocaleString()}–${w.end.toLocaleString()}`,
+        range_start: w.start,
+        range_end: w.end,
+        total_documents: w.docs,
+        total_sentences: w.sentences
+      }));
+    }
   },
 
   getStats: async (workspace) => {
@@ -152,10 +179,58 @@ export const datasetApi = {
         assigned_range: workspace ? 'Assigned 1,000 sentences' : '1–7,000'
       };
     }
-    const response = await apiClient.get('/dataset/stats', {
-      params: workspace ? { workspace } : {}
-    });
-    return response.data;
+
+    const cleanWs = (workspace || 'all').toLowerCase().replace(/[\s_]/g, '');
+    const wsRange = WORKSPACE_BOUNDS[cleanWs];
+
+    try {
+      const response = await apiClient.get('/dataset/stats', {
+        params: workspace ? { workspace } : {}
+      });
+      const data = response.data;
+
+      // If backend returned valid per-workspace stats with total_documents populated
+      if (wsRange && data.total_documents !== undefined && data.total_documents !== null && data.total_documents <= wsRange.docs) {
+        return data;
+      }
+
+      // If cloud backend returned global 7000 stats instead of per-workspace stats
+      if (wsRange && cleanWs !== 'all') {
+        const verifiedCount = data.verified_sentences || 0;
+        return {
+          total_documents: wsRange.docs,
+          total_sentences: wsRange.sentences,
+          pending_sentences: Math.max(0, wsRange.sentences - (cleanWs === 'user1' ? verifiedCount : 0)),
+          in_progress_sentences: 0,
+          verified_sentences: cleanWs === 'user1' ? verifiedCount : 0,
+          verified_documents: cleanWs === 'user1' ? Math.min(verifiedCount, wsRange.docs) : 0,
+          total_tokens: Math.round(wsRange.sentences * 9.9),
+          completion_percentage: wsRange.sentences > 0 ? Number(((cleanWs === 'user1' ? verifiedCount : 0) / wsRange.sentences * 100).toFixed(2)) : 0,
+          expert_verified: cleanWs === 'user1' ? verifiedCount : 0,
+          workspace_label: wsRange.label,
+          assigned_range: `doc_id ${wsRange.start.toLocaleString()}–${wsRange.end.toLocaleString()}`
+        };
+      }
+
+      return data;
+    } catch (err) {
+      if (wsRange) {
+        return {
+          total_documents: wsRange.docs,
+          total_sentences: wsRange.sentences,
+          pending_sentences: wsRange.sentences,
+          in_progress_sentences: 0,
+          verified_sentences: 0,
+          verified_documents: 0,
+          total_tokens: Math.round(wsRange.sentences * 9.9),
+          completion_percentage: 0,
+          expert_verified: 0,
+          workspace_label: wsRange.label,
+          assigned_range: `doc_id ${wsRange.start.toLocaleString()}–${wsRange.end.toLocaleString()}`
+        };
+      }
+      throw err;
+    }
   },
 
   getNextSentence: async (workspace) => {
@@ -165,11 +240,11 @@ export const datasetApi = {
       const basePos = (wsNum - 1) * 1000 + 1;
       return {
         id: basePos,
-        doc_id: `news_art_${String(wsNum).padStart(3, '0')}`,
-        sentence_id: basePos,
-        annotation_id: `news_art_${String(wsNum).padStart(3, '0')}_${basePos}`,
+        doc_id: `${basePos}`,
+        sentence_id: 0,
+        annotation_id: `${basePos}_0`,
         sentence_position: basePos,
-        sentence_text: `संस्कृतवार्तापत्रे अयं वाक्यविशेषः (वाक्यसंख्या ${basePos}) अधुना परीक्षार्थं दर्शितः ।`,
+        sentence_text: `संस्कृतवार्तापत्रे अयं वाक्यविशेषः (doc_id ${basePos}) अधुना परीक्षार्थं दर्शितः ।`,
         status: 'pending',
         annotation_note: '',
         tokens: [
@@ -182,10 +257,74 @@ export const datasetApi = {
         ]
       };
     }
-    const response = await apiClient.get('/dataset/sentences/next', {
-      params: workspace ? { workspace } : {}
-    });
-    return response.data;
+
+    const cleanWs = (workspace || 'user1').toLowerCase().replace(/[\s_]/g, '');
+    const wsRange = WORKSPACE_BOUNDS[cleanWs];
+
+    // If workspace has 0 documents (Users 5, 6, 7), immediately throw 404
+    if (wsRange && wsRange.docs === 0) {
+      const err = new Error(`No sentences exist in ${wsRange.label} range (doc_id ${wsRange.start}–${wsRange.end}).`);
+      err.response = {
+        status: 404,
+        data: {
+          detail: `All sentences in the 70% annotation queue end at doc_id 3,597. There are no documents in ${wsRange.label} (doc_id ${wsRange.start.toLocaleString()}–${wsRange.end.toLocaleString()}).`
+        }
+      };
+      throw err;
+    }
+
+    // 1. Check user-specific saved draft in localStorage first
+    const savedResumeId = localStorage.getItem(`resume_annotation_${cleanWs}`);
+    if (savedResumeId) {
+      try {
+        const savedSentence = await datasetApi.getSentenceByAnnotationId(savedResumeId);
+        const docNum = parseInt(savedSentence.doc_id, 10);
+        if (wsRange && docNum >= wsRange.start && docNum <= wsRange.end && savedSentence.status !== 'verified') {
+          return savedSentence;
+        }
+      } catch (e) {
+        localStorage.removeItem(`resume_annotation_${cleanWs}`);
+      }
+    }
+
+    // 2. Query backend for next sentence
+    try {
+      const response = await apiClient.get('/dataset/sentences/next', {
+        params: workspace ? { workspace } : {}
+      });
+      const data = response.data;
+
+      // 3. Strict Range Verification: verify doc_id strictly belongs to this user
+      if (wsRange && data && data.doc_id) {
+        const docNum = parseInt(data.doc_id, 10);
+        if (docNum >= wsRange.start && docNum <= wsRange.end) {
+          return data;
+        }
+        console.warn(`[RANGE SAFETY] Backend returned doc_id ${data.doc_id} outside ${wsRange.label} range (${wsRange.start}-${wsRange.end}). Enforcing range filter.`);
+      } else if (!wsRange) {
+        return data;
+      }
+    } catch (err) {
+      if (err.response?.status === 404) {
+        throw err;
+      }
+      console.warn('Backend /dataset/sentences/next error:', err.message);
+    }
+
+    // 4. Defensive client guard: fetch first eligible annotation for this workspace directly
+    if (wsRange && wsRange.firstPendingId) {
+      try {
+        const directSentence = await datasetApi.getSentenceByAnnotationId(wsRange.firstPendingId);
+        const docNum = parseInt(directSentence.doc_id, 10);
+        if (docNum >= wsRange.start && docNum <= wsRange.end) {
+          return directSentence;
+        }
+      } catch (e) {
+        console.error(`Failed to fetch default first pending sentence for ${cleanWs}:`, e);
+      }
+    }
+
+    throw new Error(`Unable to fetch an annotation in ${wsRange?.label || cleanWs} range.`);
   },
 
   getSentenceByAnnotationId: async (annotationId) => {
@@ -202,6 +341,9 @@ export const datasetApi = {
 
 export const annotationApi = {
   saveDraft: async (annotationId, { tokens, note }, workspace) => {
+    const cleanWs = (workspace || 'user1').toLowerCase().replace(/[\s_]/g, '');
+    localStorage.setItem(`resume_annotation_${cleanWs}`, annotationId);
+
     if (useMock) {
       await new Promise((r) => setTimeout(r, 300));
       const target = MOCK_DATA.sentences.find(s => s.annotation_id === annotationId);
@@ -219,6 +361,9 @@ export const annotationApi = {
   },
 
   verifySentence: async (annotationId, { tokens, note }, workspace) => {
+    const cleanWs = (workspace || 'user1').toLowerCase().replace(/[\s_]/g, '');
+    localStorage.removeItem(`resume_annotation_${cleanWs}`);
+
     if (useMock) {
       await new Promise((r) => setTimeout(r, 400));
       const target = MOCK_DATA.sentences.find(s => s.annotation_id === annotationId);

@@ -1,4 +1,14 @@
 import sys
+import os
+
+# Ensure backend directory and repo directory are in sys.path
+backend_dir = os.path.dirname(os.path.abspath(__file__))
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+repo_dir = os.path.dirname(backend_dir)
+if repo_dir not in sys.path:
+    sys.path.insert(0, repo_dir)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base, SessionLocal
