@@ -106,10 +106,11 @@ def get_stats(
     total_sentences = db.query(func.count(Sentence.id)).filter(base_filter).scalar() or 0
     pending = db.query(func.count(Sentence.id)).filter(base_filter, Sentence.status == "pending").scalar() or 0
     in_progress = db.query(func.count(Sentence.id)).filter(base_filter, Sentence.status == "in_progress").scalar() or 0
+    skipped = db.query(func.count(Sentence.id)).filter(base_filter, Sentence.status == "skipped").scalar() or 0
     verified = db.query(func.count(Sentence.id)).filter(base_filter, Sentence.status == "verified").scalar() or 0
 
     expected_total = 7000 if (start_pos == 1 and end_pos == 7000) else 1000
-    is_completed = bool(total_sentences == expected_total and verified == expected_total and pending == 0 and in_progress == 0)
+    is_completed = bool(total_sentences == expected_total and verified == expected_total and pending == 0 and in_progress == 0 and skipped == 0)
 
     # Count distinct unique documents in this sentence range
     total_documents = (
@@ -141,6 +142,7 @@ def get_stats(
         "assigned_sentences": total_sentences,
         "pending_sentences": pending,
         "in_progress_sentences": in_progress,
+        "skipped_sentences": skipped,
         "verified_sentences": verified,
         "verified_documents": verified_documents,
         "total_tokens": token_count,
@@ -208,20 +210,40 @@ def get_next_sentence(
         )
         return pending
 
-    # 3. If no in-progress or pending sentence exists, verify database status counts strictly
+    # 3. If no in-progress or pending sentences remain, check if there are skipped sentences for review
+    skipped_sentence = (
+        db.query(Sentence)
+        .options(selectinload(Sentence.tokens))
+        .filter(
+            base_filter,
+            Sentence.status == "skipped"
+        )
+        .order_by(Sentence.sentence_position.asc())
+        .first()
+    )
+    if skipped_sentence:
+        logger.info(
+            f"[ResumeAnnotation] Loaded earliest skipped sentence for review: sentence_position=#{skipped_sentence.sentence_position}, "
+            f"annotation_id='{skipped_sentence.annotation_id}'. Range: {start_pos}–{end_pos}."
+        )
+        return skipped_sentence
+
+    # 4. If no in-progress, pending, or skipped sentence exists, verify database status counts strictly
     total_in_range = db.query(func.count(Sentence.id)).filter(base_filter).scalar() or 0
     verified_in_range = db.query(func.count(Sentence.id)).filter(base_filter, Sentence.status == "verified").scalar() or 0
     pending_in_range = db.query(func.count(Sentence.id)).filter(base_filter, Sentence.status == "pending").scalar() or 0
     in_progress_in_range = db.query(func.count(Sentence.id)).filter(base_filter, Sentence.status == "in_progress").scalar() or 0
+    skipped_in_range = db.query(func.count(Sentence.id)).filter(base_filter, Sentence.status == "skipped").scalar() or 0
 
     expected_total = 7000 if (start_pos == 1 and end_pos == 7000) else 1000
 
-    # Genuine completion check: ALL 1,000 sentences verified, exactly 0 pending, 0 in_progress
+    # Genuine completion check: ALL 1,000 sentences verified, exactly 0 pending, 0 in_progress, 0 skipped
     if (
         total_in_range == expected_total and
         verified_in_range == expected_total and
         pending_in_range == 0 and
-        in_progress_in_range == 0
+        in_progress_in_range == 0 and
+        skipped_in_range == 0
     ):
         logger.info(f"[ResumeAnnotation] Genuine completion confirmed for {label}: all {expected_total} sentences verified.")
         raise HTTPException(
@@ -231,7 +253,7 @@ def get_next_sentence(
 
     logger.warning(
         f"[ResumeAnnotation] Discrepancy for {label}: total={total_in_range}, verified={verified_in_range}, "
-        f"pending={pending_in_range}, in_progress={in_progress_in_range}."
+        f"pending={pending_in_range}, in_progress={in_progress_in_range}, skipped={skipped_in_range}."
     )
     # Discrepancy report: do NOT return 404 or completion
     raise HTTPException(
@@ -239,7 +261,7 @@ def get_next_sentence(
         detail=(
             f"Assignment discrepancy in {label} ({start_pos:,}–{end_pos:,}): "
             f"Found {total_in_range:,} total sentences (expected {expected_total:,}), "
-            f"{verified_in_range:,} verified, {pending_in_range:,} pending, {in_progress_in_range:,} in-progress. "
+            f"{verified_in_range:,} verified, {pending_in_range:,} pending, {in_progress_in_range:,} in-progress, {skipped_in_range:,} skipped. "
             f"No eligible pending sentence could be loaded."
         )
     )

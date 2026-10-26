@@ -348,6 +348,55 @@ export const annotationApi = {
       params: workspace ? { workspace } : {}
     });
     return response.data;
+  },
+
+  skipSentence: async (annotationId, { tokens, note } = {}, workspace) => {
+    const cleanWs = (workspace || 'user1').toLowerCase().replace(/[\s_]/g, '');
+    localStorage.removeItem(`resume_annotation_${cleanWs}`);
+
+    if (useMock) {
+      await new Promise((r) => setTimeout(r, 200));
+      const target = MOCK_DATA.sentences.find(s => s.annotation_id === annotationId);
+      if (target) {
+        target.status = 'skipped';
+      }
+      return {
+        message: 'Sentence skipped successfully',
+        skipped_annotation_id: annotationId,
+        next_sentence: MOCK_DATA.sentences.find(s => s.status !== 'verified' && s.annotation_id !== annotationId) || null
+      };
+    }
+    const response = await apiClient.post(`/annotations/${annotationId}/skip`, { tokens, note }, {
+      params: workspace ? { workspace } : {}
+    });
+    return response.data;
+  },
+
+  getSkippedSentences: async (workspace) => {
+    if (useMock) {
+      await new Promise((r) => setTimeout(r, 100));
+      return MOCK_DATA.sentences.filter(s => s.status === 'skipped');
+    }
+    const response = await apiClient.get('/annotations/skipped', {
+      params: workspace ? { workspace } : {}
+    });
+    return response.data;
+  },
+
+  resumeSkippedSentence: async (annotationId, workspace) => {
+    const cleanWs = (workspace || 'user1').toLowerCase().replace(/[\s_]/g, '');
+    localStorage.setItem(`resume_annotation_${cleanWs}`, annotationId);
+
+    if (useMock) {
+      await new Promise((r) => setTimeout(r, 200));
+      const target = MOCK_DATA.sentences.find(s => s.annotation_id === annotationId);
+      if (target) target.status = 'in_progress';
+      return target;
+    }
+    const response = await apiClient.post(`/annotations/${annotationId}/resume`, {}, {
+      params: workspace ? { workspace } : {}
+    });
+    return response.data;
   }
 };
 

@@ -229,3 +229,188 @@ def verify_sentence_annotation(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database transaction failed while saving verification: {str(exc)}"
         )
+
+
+def skip_sentence_annotation(
+    annotation_id: str,
+    token_inputs: Optional[List[TokenAnnotationInput]],
+    note: Optional[str],
+    user: User,
+    db: Session,
+    workspace: Optional[str] = None
+) -> Sentence:
+    """Marks sentence as skipped for this expert and preserves any partial token annotations."""
+    sentence = (
+        db.query(Sentence)
+        .options(selectinload(Sentence.tokens))
+        .filter(Sentence.annotation_id == annotation_id)
+        .first()
+    )
+    if not sentence:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Sentence with annotation_id '{annotation_id}' not found."
+        )
+
+    from routes.dataset_routes import resolve_sentence_position_range
+    start_pos, end_pos, target_label = resolve_sentence_position_range(workspace, user)
+
+    pos = sentence.sentence_position or 0
+    if pos < start_pos or pos > end_pos:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Sentence '{annotation_id}' (position #{pos}) is outside {target_label} range ({start_pos:,}–{end_pos:,})."
+        )
+
+    if sentence.status == "verified":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Sentence '{annotation_id}' is already verified and cannot be skipped."
+        )
+
+    try:
+        # If user entered any partial draft tags, preserve them
+        if token_inputs:
+            tag_map = {t.token_id: t for t in token_inputs}
+            for token in sentence.tokens:
+                if token.token_id in tag_map:
+                    inp = tag_map[token.token_id]
+                    if inp.gold_sanskrit_tag is not None:
+                        new_tag = inp.gold_sanskrit_tag.strip()
+                        if new_tag and new_tag in APPROVED_TAG_SET:
+                            token.gold_sanskrit_tag = new_tag
+                    if inp.annotation_note is not None:
+                        token.annotation_note = inp.annotation_note.strip()
+
+        if note is not None:
+            sentence.annotation_note = note
+
+        sentence.status = "skipped"
+        now = _get_utc_now()
+        sentence.skipped_at = now
+        sentence.updated_at = now
+
+        db.commit()
+        db.refresh(sentence)
+        return sentence
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database transaction failed while skipping sentence: {str(exc)}"
+        )
+
+
+def resume_skipped_sentence(
+    annotation_id: str,
+    user: User,
+    db: Session,
+    workspace: Optional[str] = None
+) -> Sentence:
+    """Reopens a skipped sentence and marks it in_progress for annotation."""
+    sentence = (
+        db.query(Sentence)
+        .options(selectinload(Sentence.tokens))
+        .filter(Sentence.annotation_id == annotation_id)
+        .first()
+    )
+    if not sentence:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Sentence with annotation_id '{annotation_id}' not found."
+        )
+
+    from routes.dataset_routes import resolve_sentence_position_range
+    start_pos, end_pos, target_label = resolve_sentence_position_range(workspace, user)
+
+    pos = sentence.sentence_position or 0
+    if pos < start_pos or pos > end_pos:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Sentence '{annotation_id}' (position #{pos}) is outside {target_label} range ({start_pos:,}–{end_pos:,})."
+        )
+
+    if sentence.status == "verified":
+        return sentence
+
+    # If it was skipped, mark it in_progress so it can be resumed
+    if sentence.status == "skipped":
+        sentence.status = "in_progress"
+        sentence.updated_at = _get_utc_now()
+        db.commit()
+        db.refresh(sentence)
+
+    return sentence
+
+
+def get_next_sentence_after_skip(
+    current_pos: int,
+    start_pos: int,
+    end_pos: int,
+    db: Session
+) -> Optional[Sentence]:
+    """
+    Finds the next eligible sentence for this user after skipping current_pos.
+    Prioritizes:
+    1. Earlier in-progress draft (if any).
+    2. Next pending sentence with sentence_position > current_pos.
+    3. Any pending sentence from start_pos (wrap around).
+    4. Next skipped sentence (if all pending/draft are done).
+    """
+    base_filter = (Sentence.sentence_position >= start_pos) & (Sentence.sentence_position <= end_pos)
+
+    # 1. Any in-progress draft (excluding the one just skipped)
+    draft = (
+        db.query(Sentence)
+        .options(selectinload(Sentence.tokens))
+        .filter(base_filter, Sentence.status == "in_progress", Sentence.sentence_position != current_pos)
+        .order_by(Sentence.sentence_position.asc())
+        .first()
+    )
+    if draft:
+        return draft
+
+    # 2. Next pending sentence forward in the range
+    next_pending = (
+        db.query(Sentence)
+        .options(selectinload(Sentence.tokens))
+        .filter(base_filter, Sentence.status == "pending", Sentence.sentence_position > current_pos)
+        .order_by(Sentence.sentence_position.asc())
+        .first()
+    )
+    if next_pending:
+        return next_pending
+
+    # 3. Any pending sentence in the range (wrap-around)
+    any_pending = (
+        db.query(Sentence)
+        .options(selectinload(Sentence.tokens))
+        .filter(base_filter, Sentence.status == "pending")
+        .order_by(Sentence.sentence_position.asc())
+        .first()
+    )
+    if any_pending:
+        return any_pending
+
+    # 4. If no pending/draft sentences remain, look for next skipped sentence (second pass)
+    next_skipped = (
+        db.query(Sentence)
+        .options(selectinload(Sentence.tokens))
+        .filter(base_filter, Sentence.status == "skipped", Sentence.sentence_position > current_pos)
+        .order_by(Sentence.sentence_position.asc())
+        .first()
+    )
+    if next_skipped:
+        return next_skipped
+
+    any_skipped = (
+        db.query(Sentence)
+        .options(selectinload(Sentence.tokens))
+        .filter(base_filter, Sentence.status == "skipped")
+        .order_by(Sentence.sentence_position.asc())
+        .first()
+    )
+    return any_skipped

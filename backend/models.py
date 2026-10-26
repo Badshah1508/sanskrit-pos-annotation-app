@@ -35,6 +35,7 @@ class Sentence(Base):
     assigned_expert_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=True)
     verified_by = Column(String(50), nullable=True)
     verified_at = Column(DateTime, nullable=True)
+    skipped_at = Column(DateTime, nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

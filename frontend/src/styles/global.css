@@ -134,6 +134,11 @@ body {
   color: #15803d;
 }
 
+.badge-skipped {
+  background-color: #ffedd5;
+  color: #c2410c;
+}
+
 /* Alerts */
 .alert {
   padding: 0.85rem 1.1rem;

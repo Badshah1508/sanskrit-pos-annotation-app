@@ -3,6 +3,7 @@ import { datasetApi, annotationApi } from '../api';
 import TokenRow from './TokenRow';
 import TokenCard from './TokenCard';
 import ConfirmDialog from './ConfirmDialog';
+import SkippedSentencesModal from './SkippedSentencesModal';
 import { validateSentenceForVerification } from '../utils/validation';
 
 export default function AnnotationPage({
@@ -18,6 +19,9 @@ export default function AnnotationPage({
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [skipping, setSkipping] = useState(false);
+  const [skippedList, setSkippedList] = useState([]);
+  const [showSkippedModal, setShowSkippedModal] = useState(false);
   const [feedback, setFeedback] = useState(null); // { type: 'success' | 'error', text: '' }
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
@@ -30,6 +34,16 @@ export default function AnnotationPage({
   const displayName = activeUserLabel || user?.display_name || user?.username || 'Current Scholar';
   const displayRange = activeRangeLabel || '1,000 sentences';
 
+  const loadSkippedList = async (targetWs = workspace) => {
+    try {
+      const queryWs = (targetWs === 'all') ? null : targetWs;
+      const list = await annotationApi.getSkippedSentences(queryWs);
+      setSkippedList(list || []);
+    } catch (err) {
+      console.error('Failed to load skipped sentences', err);
+    }
+  };
+
   useEffect(() => {
     // Immediately clear current sentence and completion flags so stale data is never shown
     setSentence(null);
@@ -40,6 +54,7 @@ export default function AnnotationPage({
     setIsGenuineCompletion(false);
     setCompletionMessage('');
     loadNextSentence(workspace);
+    loadSkippedList(workspace);
   }, [workspace]);
 
   const loadNextSentence = async (targetWs = workspace, isAfterSave = false, savedInfo = null) => {
@@ -225,6 +240,78 @@ export default function AnnotationPage({
 
     // 3. Save succeeded! Now fetch the next sentence in this expert's workspace
     await loadNextSentence(workspace, true, { pos: savedPos, annId: savedAnnId });
+    loadSkippedList(workspace);
+  };
+
+  const handleSkipSentence = async () => {
+    if (!sentence) return;
+    setSkipping(true);
+    setFeedback(null);
+    setNextSentenceError(null);
+
+    const skippedPos = sentence.sentence_position || sentence.sentence_id;
+    try {
+      const res = await annotationApi.skipSentence(sentence.annotation_id, {
+        tokens,
+        note
+      }, workspace);
+
+      setHasUnsavedChanges(false);
+      await loadSkippedList(workspace);
+
+      if (res && res.next_sentence) {
+        setSentence(res.next_sentence);
+        setTokens(res.next_sentence.tokens || []);
+        setNote(res.next_sentence.annotation_note || '');
+        setFeedback({
+          type: 'info',
+          text: `⏭ Sentence #${skippedPos} skipped and added to your queue. Loaded next sentence #${res.next_sentence.sentence_position || res.next_sentence.id}.`
+        });
+      } else {
+        await loadNextSentence(workspace);
+        setFeedback({
+          type: 'info',
+          text: `⏭ Sentence #${skippedPos} skipped and added to your queue.`
+        });
+      }
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        text: 'Failed to skip sentence: ' + (err.response?.data?.detail || err.message)
+      });
+    } finally {
+      setSkipping(false);
+    }
+  };
+
+  const handleResumeSkipped = async (item) => {
+    try {
+      setLoading(true);
+      setShowSkippedModal(false);
+      setFeedback(null);
+      setNextSentenceError(null);
+
+      const targetId = item.annotation_id || item.id;
+      const resumedSentence = await annotationApi.resumeSkippedSentence(targetId, workspace);
+
+      setSentence(resumedSentence);
+      setTokens(resumedSentence.tokens || []);
+      setNote(resumedSentence.annotation_note || '');
+      setHasUnsavedChanges(false);
+      await loadSkippedList(workspace);
+
+      setFeedback({
+        type: 'info',
+        text: `▶ Resumed skipped sentence #${resumedSentence.sentence_position || resumedSentence.id}. You can annotate and verify it now.`
+      });
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        text: 'Failed to resume skipped sentence: ' + (err.response?.data?.detail || err.message)
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRequestDashboard = () => {
@@ -297,6 +384,24 @@ export default function AnnotationPage({
           ← Back to Dashboard
         </button>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setShowSkippedModal(true)}
+            style={{
+              padding: '0.25rem 0.65rem',
+              fontSize: '0.825rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              backgroundColor: skippedList.length > 0 ? '#fff7ed' : '#f8fafc',
+              borderColor: skippedList.length > 0 ? '#fdba74' : '#cbd5e1',
+              color: skippedList.length > 0 ? '#c2410c' : '#64748b',
+              fontWeight: 600
+            }}
+            title="View and resume skipped sentences in your workspace"
+          >
+            ⏭ Skipped Queue: <strong>{skippedList.length}</strong>
+          </button>
           <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--primary-color)', background: '#eff6ff', padding: '0.2rem 0.6rem', borderRadius: '4px', border: '1px solid #bfdbfe' }}>
             {displayName} • Range: {displayRange}
           </span>
@@ -426,15 +531,33 @@ export default function AnnotationPage({
             <button
               className="btn btn-secondary"
               onClick={handleSaveDraft}
-              disabled={saving}
+              disabled={saving || skipping}
             >
               {saving ? 'Saving...' : '💾 Save Draft'}
             </button>
 
             <button
+              className="btn btn-warning"
+              onClick={handleSkipSentence}
+              disabled={saving || skipping}
+              style={{
+                backgroundColor: '#ea580c',
+                borderColor: '#c2410c',
+                color: 'white',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem'
+              }}
+              title="Temporarily skip this sentence and move to the next one. You can resume it anytime from the Skipped Queue."
+            >
+              {skipping ? 'Skipping...' : '⏭ Skip Sentence'}
+            </button>
+
+            <button
               className="btn btn-success"
               onClick={handleSaveAndNext}
-              disabled={saving}
+              disabled={saving || skipping}
             >
               {saving ? 'Verifying & Saving...' : '✓ Save & Next'}
             </button>
@@ -453,6 +576,16 @@ export default function AnnotationPage({
           onBackToDashboard();
         }}
         onCancel={() => setShowExitConfirm(false)}
+      />
+
+      {/* Skipped Sentences Queue Modal */}
+      <SkippedSentencesModal
+        isOpen={showSkippedModal}
+        onClose={() => setShowSkippedModal(false)}
+        skippedList={skippedList}
+        onResume={handleResumeSkipped}
+        displayName={displayName}
+        displayRange={displayRange}
       />
     </div>
   );

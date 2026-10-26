@@ -221,6 +221,24 @@ export default function Dashboard({
             Gold-standard validated
           </div>
         </div>
+
+        <div style={{
+          background: 'white',
+          padding: '1.25rem',
+          borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--border-color)',
+          boxShadow: 'var(--shadow-sm)'
+        }}>
+          <div style={{ color: '#ea580c', fontSize: '0.85rem', fontWeight: 600, textTransform: 'uppercase' }}>
+            Skipped Sentences
+          </div>
+          <div style={{ fontSize: '2rem', fontWeight: 700, color: '#c2410c', marginTop: '0.25rem' }}>
+            {stats?.skipped_sentences || 0}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.25rem' }}>
+            To resume before completion
+          </div>
+        </div>
       </div>
 
       {/* 7 Expert Workspace Switcher Overview */}
@@ -289,6 +307,7 @@ export default function Dashboard({
           <li>Examine the Sanskrit sentence and each individual token in Devanagari script.</li>
           <li>Assign the appropriate <strong>Sanskrit Consortium POS tag</strong> (e.g., <code>N, KP, A, AVN</code>) from the dropdown.</li>
           <li>Click <strong>Save Draft</strong> if you want to pause your work without marking the sentence verified.</li>
+          <li>Click <strong>Skip Sentence</strong> if you encounter a complex sentence you wish to review later; you can resume skipped sentences at any time from the queue.</li>
           <li>Click <strong>Save & Next</strong> to finalize all tags, validate completeness, save changes into the database, and move directly to your next pending sentence.</li>
         </ul>
       </div>

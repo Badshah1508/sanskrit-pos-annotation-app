@@ -66,6 +66,7 @@ class SentenceBase(BaseModel):
     annotation_note: Optional[str] = None
     verified_by: Optional[str] = None
     verified_at: Optional[datetime] = None
+    skipped_at: Optional[datetime] = None
 
 class SentenceDetailResponse(SentenceBase):
     id: int
@@ -81,6 +82,16 @@ class SentenceDraftRequest(BaseModel):
 class SentenceVerifyRequest(BaseModel):
     tokens: List[TokenAnnotationInput]
     note: Optional[str] = None
+
+class SentenceSkipRequest(BaseModel):
+    tokens: Optional[List[TokenAnnotationInput]] = None
+    note: Optional[str] = None
+
+class SkipSentenceResponse(BaseModel):
+    message: str
+    skipped_sentence_id: int
+    skipped_annotation_id: str
+    next_sentence: Optional[SentenceDetailResponse] = None
 
 
 # ----------------- Workspace & Dataset Stats Schema -----------------
@@ -101,6 +112,7 @@ class DatasetStatsResponse(BaseModel):
     assigned_sentences: Optional[int] = None
     pending_sentences: int
     in_progress_sentences: int
+    skipped_sentences: Optional[int] = 0
     verified_sentences: int
     verified_documents: Optional[int] = None
     total_tokens: int
