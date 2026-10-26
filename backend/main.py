@@ -48,18 +48,17 @@ app.add_middleware(
 def startup_event():
     db = SessionLocal()
     try:
-        # 1. Seed Tag Inventory if empty
-        tag_count = db.query(TagInventory).count()
-        if tag_count == 0:
-            print("Seeding Sanskrit Consortium Tag Inventory...")
-            for tag_name in settings.APPROVED_SANSKRIT_TAGS:
+        # 1. Seed or synchronize Tag Inventory
+        for tag_name in settings.APPROVED_SANSKRIT_TAGS:
+            existing_tag = db.query(TagInventory).filter(TagInventory.tag == tag_name).first()
+            if not existing_tag:
                 tag_record = TagInventory(
                     tag=tag_name,
-                    name=f"Sanskrit Consortium Tag {tag_name}",
-                    description=f"Approved Consortium Tag: {tag_name}"
+                    name="Punctuation (विरामचिह्नम्)" if tag_name == "PU" else f"Sanskrit Consortium Tag {tag_name}",
+                    description="Punctuation mark" if tag_name == "PU" else f"Approved Consortium Tag: {tag_name}"
                 )
                 db.add(tag_record)
-            db.commit()
+        db.commit()
 
         # 2. Check and ensure 7 expert assignments are set up if sentences exist
         sentence_count = db.query(Sentence).count()

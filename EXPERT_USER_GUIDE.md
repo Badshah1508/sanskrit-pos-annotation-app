@@ -105,6 +105,7 @@ Please assign one tag from the 23 approved **Sanskrit Consortium POS tags** to e
 | **AVC** | संख्यावाच्यव्ययम् (Quantifier Indeclinable) | Numerical or quantitative particle | सकृत्, त्रिः, बहुशः |
 | **DVI** | द्विरुक्तम् (Reduplicated Word) | Repeated word for frequency or emphasis | शनैः शनैः, पुनः पुनः |
 | **A** | विशेषणम् (Qualifying Adjective) | Descriptive adjective qualifying a noun | नूतनम्, प्राचीनतमा, समृद्धा |
+| **PU** | विरामचिह्नम् (Punctuation) | Punctuation marks across the news corpus | ।, ॥, ,, ;, :, ., ?, !, ", ', () |
 
 ---
 

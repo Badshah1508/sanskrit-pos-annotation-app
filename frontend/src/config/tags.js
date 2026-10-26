@@ -24,7 +24,8 @@ export const SANSKRIT_CONSORTIUM_TAGS = [
   { tag: 'AB', name: 'Abbreviation (संक्षेपः)', description: 'Abbreviated word or symbol' },
   { tag: 'AVC', name: 'Numerical / Quantifier Indeclinable', description: 'Indeclinable number or quantitative marker' },
   { tag: 'DVI', name: 'Reduplicated Form (द्विरुक्तम्)', description: 'Repeated word for emphasis or frequency' },
-  { tag: 'A', name: 'Adjective / Visheshana (विशेषणम्)', description: 'Qualifying adjective modifying a noun' }
+  { tag: 'A', name: 'Adjective / Visheshana (विशेषणम्)', description: 'Qualifying adjective modifying a noun' },
+  { tag: 'PU', name: 'Punctuation', label: 'PU — Punctuation', description: 'Punctuation marks (।, ॥, ,, ;, :, ., ?, !, quotes, brackets)' }
 ];
 
 export const VALID_TAG_SET = new Set(SANSKRIT_CONSORTIUM_TAGS.map(t => t.tag));

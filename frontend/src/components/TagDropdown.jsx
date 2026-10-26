@@ -17,7 +17,7 @@ export default function TagDropdown({ value, onChange, disabled = false, id }) {
         <option value="">-- Select Tag (अनिश्चितम्) --</option>
         {SANSKRIT_CONSORTIUM_TAGS.map((item) => (
           <option key={item.tag} value={item.tag}>
-            {item.tag} — {item.name}
+            {item.label || `${item.tag} — ${item.name}`}
           </option>
         ))}
       </select>

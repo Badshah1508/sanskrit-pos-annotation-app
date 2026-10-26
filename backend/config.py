@@ -29,11 +29,11 @@ class Settings(BaseSettings):
     ]
     
     # Approved Sanskrit Consortium POS Tag Inventory
-    # N, NS, NV, KNV, SN, SNV, SNS, SAM, SAMY, SAMP, KP, UP, AVN, AVP, AVUP, SAMB, AVU, K, AKV, AB, AVC, DVI, A
+    # N, NS, NV, KNV, SN, SNV, SNS, SAM, SAMY, SAMP, KP, UP, AVN, AVP, AVUP, SAMB, AVU, K, AKV, AB, AVC, DVI, A, PU
     APPROVED_SANSKRIT_TAGS: List[str] = [
         "N", "NS", "NV", "KNV", "SN", "SNV", "SNS", 
         "SAM", "SAMY", "SAMP", "KP", "UP", "AVN", "AVP", 
-        "AVUP", "SAMB", "AVU", "K", "AKV", "AB", "AVC", "DVI", "A"
+        "AVUP", "SAMB", "AVU", "K", "AKV", "AB", "AVC", "DVI", "A", "PU"
     ]
 
     class Config:
