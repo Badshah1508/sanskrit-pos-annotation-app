@@ -20,6 +20,8 @@ dist-ssr/
 .env
 .env.local
 .env.*.local
+*credentials*.json
+google_drive_credentials.json
 
 # Logs
 npm-debug.log*
