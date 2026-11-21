@@ -1,6 +1,6 @@
 import io
 import csv
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from models import Sentence, Token
 
 EXPORT_COLUMNS = [
@@ -23,6 +23,7 @@ def generate_verified_csv(db: Session) -> io.StringIO:
 
     verified_sentences = (
         db.query(Sentence)
+        .options(selectinload(Sentence.tokens))
         .filter(Sentence.status == "verified")
         .order_by(Sentence.id)
         .all()
